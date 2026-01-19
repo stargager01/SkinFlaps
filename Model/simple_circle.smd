@@ -1,0 +1,34 @@
+{
+    "dynamicObjects" : {
+        "simple_circle.obj" : {
+            "textureMaps": [
+                1,
+                2,
+                3,
+                4
+            ]
+        }
+    },
+    "textureFiles" : {
+        "diffuse2.jpg" : 1,
+        "normal.jpg" : 2,
+        "deepBedTexture.jpg" : 3,
+        "deepBedNormal.jpg" : 4
+    },
+    "tetrahedralProperties" : {
+        "minStrain" : 0.8,
+        "maxStrain" : 1.26,
+        "lowTetWeight" : 500.0,
+        "highTetWeight" : 1000.0,
+        "TJunctionWeight" : 50.0,
+        "collisionWeight": 40000.0,
+        "selfCollisionWeight" : 80000.0,
+        "fixedWeight" : 10000.0,
+        "periferalWeight" : 1000.0,
+        "hookWeight" : 1000.0,
+        "sutureWeight" : 2000.0,
+        "autoSutureSpacing" : 0.14,
+        "nTetSizeLevels" : 3,
+        "maxDimMegatetSubdivs" : 16
+    }
+}
