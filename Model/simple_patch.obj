@@ -1,66 +1,66 @@
-# Simple Patch with radial top surface for surgery simulation
+# Simple Patch - octagonal prism for surgery simulation
 # Material 2 = top surface (main skin), Material 1 = sides (periferal), Material 7 = bottom (periosteal)
 
 # Top surface vertices - center + 2 rings (17 vertices, indices 1-17)
 # Center (1)
 v 0.0 0.0 1.0
-# Inner ring radius ~1.0 - 8 points (2-9)
+# Inner ring radius 1.0 - 8 points (2-9)
 v 1.0 0.0 1.0
-v 1.0 1.0 1.0
+v 0.707 0.707 1.0
 v 0.0 1.0 1.0
-v -1.0 1.0 1.0
+v -0.707 0.707 1.0
 v -1.0 0.0 1.0
-v -1.0 -1.0 1.0
+v -0.707 -0.707 1.0
 v 0.0 -1.0 1.0
-v 1.0 -1.0 1.0
-# Outer ring radius ~2.0 - 8 points (10-17)
+v 0.707 -0.707 1.0
+# Outer ring radius 2.0 - 8 points (10-17)
 v 2.0 0.0 1.0
-v 2.0 2.0 1.0
+v 1.414 1.414 1.0
 v 0.0 2.0 1.0
-v -2.0 2.0 1.0
+v -1.414 1.414 1.0
 v -2.0 0.0 1.0
-v -2.0 -2.0 1.0
+v -1.414 -1.414 1.0
 v 0.0 -2.0 1.0
-v 2.0 -2.0 1.0
+v 1.414 -1.414 1.0
 
 # Bottom surface vertices - center + outer ring (9 vertices, indices 18-26)
 v 0.0 0.0 -0.5
 v 2.0 0.0 -0.5
-v 2.0 2.0 -0.5
+v 1.414 1.414 -0.5
 v 0.0 2.0 -0.5
-v -2.0 2.0 -0.5
+v -1.414 1.414 -0.5
 v -2.0 0.0 -0.5
-v -2.0 -2.0 -0.5
+v -1.414 -1.414 -0.5
 v 0.0 -2.0 -0.5
-v 2.0 -2.0 -0.5
+v 1.414 -1.414 -0.5
 
 # Texture coordinates (26)
 vt 0.5 0.5
 vt 0.75 0.5
-vt 0.75 0.75
+vt 0.677 0.677
 vt 0.5 0.75
-vt 0.25 0.75
+vt 0.323 0.677
 vt 0.25 0.5
-vt 0.25 0.25
+vt 0.323 0.323
 vt 0.5 0.25
-vt 0.75 0.25
+vt 0.677 0.323
 vt 1.0 0.5
-vt 1.0 1.0
+vt 0.854 0.854
 vt 0.5 1.0
-vt 0.0 1.0
+vt 0.146 0.854
 vt 0.0 0.5
-vt 0.0 0.0
+vt 0.146 0.146
 vt 0.5 0.0
-vt 1.0 0.0
+vt 0.854 0.146
 vt 0.5 0.5
 vt 1.0 0.5
-vt 1.0 1.0
+vt 0.854 0.854
 vt 0.5 1.0
-vt 0.0 1.0
+vt 0.146 0.854
 vt 0.0 0.5
-vt 0.0 0.0
+vt 0.146 0.146
 vt 0.5 0.0
-vt 1.0 0.0
+vt 0.854 0.146
 
 # Top surface (material 2 - skin) - 24 triangles total, CCW
 usemtl 2
