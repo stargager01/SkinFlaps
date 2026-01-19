@@ -352,6 +352,7 @@ MigrationBackup/
 # SkinFlaps specific exceptions to above ignore rules
 !/Model/*
 !/History/*
+!/examples/*
 /History/junk.hst
 /History/junk2.hst
 /SkinFlaps/src/vnBccTetCutter_old.cpp
