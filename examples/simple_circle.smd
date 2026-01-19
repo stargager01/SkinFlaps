@@ -1,0 +1,31 @@
+{
+    "dynamicObjects" : {
+        "simple_circle_patch.obj" : {
+            "textureMaps": []
+        }
+    },
+    "staticObjects" : {
+    },
+    "textureFiles" : {
+    },
+    "tetrahedralProperties" : {
+        "minStrain" : 0.85,
+        "maxStrain" : 1.20,
+        "lowTetWeight" : 400.0,
+        "highTetWeight" : 800.0,
+        "TJunctionWeight" : 40.0,
+        "collisionWeight": 30000.0,
+        "selfCollisionWeight" : 60000.0,
+        "fixedWeight" : 8000.0,
+        "periferalWeight" : 800.0,
+        "hookWeight" : 800.0,
+        "sutureWeight" : 1500.0,
+        "autoSutureSpacing" : 0.1,
+        "nTetSizeLevels" : 3,
+        "maxDimMegatetSubdivs" : 20
+    },
+    "tetrahedralSubsets" : {
+    },
+    "fixedCollisionSets" : {
+    }
+}
