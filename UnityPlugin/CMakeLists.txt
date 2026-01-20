@@ -129,6 +129,8 @@ target_include_directories(SkinFlapsCore PRIVATE
     ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library
     ${SKINFLAPS_ROOT}/simd-numeric-kernels-new
     ${SKINFLAPS_ROOT}/imgui_glfw_nfd_lib
+    ${SKINFLAPS_ROOT}/imgui_glfw_nfd_lib/extLibs/gl3w
+    ${SKINFLAPS_ROOT}/imgui_glfw_nfd_lib/extLibs/glfw/include
     ${MKL_INCLUDE}
     ${TBB_INCLUDE}
 )
