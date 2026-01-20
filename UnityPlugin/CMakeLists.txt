@@ -116,21 +116,70 @@ endif()
 
 set(MKL_COPT "")
 
-# Intel TBB
+# Intel TBB - Direct configuration (bypass FindTBB.cmake issues)
 set(TBB_ROOT "${ONEAPI_ROOT}/tbb/latest")
+set(TBB_INCLUDE "${TBB_ROOT}/include")
+message(STATUS "TBB_ROOT: ${TBB_ROOT}")
+
+# Check if TBB CMake config exists and use it
 if(EXISTS "${TBB_ROOT}/lib/cmake/tbb/TBBConfig.cmake")
+    # Temporarily remove PDTetPhysics cmake path to avoid FindTBB.cmake
+    set(_SAVED_MODULE_PATH ${CMAKE_MODULE_PATH})
+    list(REMOVE_ITEM CMAKE_MODULE_PATH "${SKINFLAPS_ROOT}/PDTetPhysics/cmake")
+
     set(TBB_DIR "${TBB_ROOT}/lib/cmake/tbb")
+    find_package(TBB CONFIG QUIET)
+
+    set(CMAKE_MODULE_PATH ${_SAVED_MODULE_PATH})
 endif()
-find_package(TBB QUIET)
+
 if(NOT TBB_FOUND)
-    message(STATUS "TBB not found via CMake, using direct paths")
-    set(TBB_INCLUDE "${TBB_ROOT}/include")
+    message(STATUS "TBB: Using direct path configuration")
+    set(TBB_FOUND OFF)
+
     if(WIN32)
-        set(TBB_LIB "${TBB_ROOT}/lib/tbb12.lib")
-        set(TBB_DLL_DIR "${TBB_ROOT}/bin")
+        # Try multiple possible library names for Windows
+        if(EXISTS "${TBB_ROOT}/lib/tbb12.lib")
+            set(TBB_LIB "${TBB_ROOT}/lib/tbb12.lib")
+        elseif(EXISTS "${TBB_ROOT}/lib/intel64/vc14/tbb12.lib")
+            set(TBB_LIB "${TBB_ROOT}/lib/intel64/vc14/tbb12.lib")
+        elseif(EXISTS "${TBB_ROOT}/lib/tbb.lib")
+            set(TBB_LIB "${TBB_ROOT}/lib/tbb.lib")
+        else()
+            # Search for any tbb*.lib
+            file(GLOB TBB_LIB_FILES "${TBB_ROOT}/lib/tbb*.lib" "${TBB_ROOT}/lib/intel64/vc14/tbb*.lib")
+            if(TBB_LIB_FILES)
+                list(GET TBB_LIB_FILES 0 TBB_LIB)
+            endif()
+        endif()
+
+        # Find TBB DLL directory
+        if(EXISTS "${TBB_ROOT}/bin")
+            set(TBB_DLL_DIR "${TBB_ROOT}/bin")
+        elseif(EXISTS "${TBB_ROOT}/redist/intel64/vc14")
+            set(TBB_DLL_DIR "${TBB_ROOT}/redist/intel64/vc14")
+        endif()
     else()
-        set(TBB_LIB "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so.12")
+        # Linux
+        if(EXISTS "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so.12")
+            set(TBB_LIB "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so.12")
+        elseif(EXISTS "${TBB_ROOT}/lib/libtbb.so.12")
+            set(TBB_LIB "${TBB_ROOT}/lib/libtbb.so.12")
+        else()
+            file(GLOB TBB_LIB_FILES "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so*" "${TBB_ROOT}/lib/libtbb.so*")
+            if(TBB_LIB_FILES)
+                list(GET TBB_LIB_FILES 0 TBB_LIB)
+            endif()
+        endif()
     endif()
+
+    if(TBB_LIB)
+        message(STATUS "TBB library: ${TBB_LIB}")
+    else()
+        message(WARNING "TBB library not found. Build may fail.")
+    endif()
+else()
+    message(STATUS "TBB: Found via CMake config")
 endif()
 
 # OpenMP
