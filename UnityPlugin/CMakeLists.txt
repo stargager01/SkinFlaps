@@ -1,24 +1,17 @@
 ##############################################################################
-# SkinFlaps Unity Native Plugin CMake Build Configuration
+# SkinFlaps Unity Native Plugin - Using Pre-built Libraries
 #
-# This CMakeLists.txt builds the SkinFlaps physics simulation as a Unity
-# native plugin DLL. It compiles only the core physics and surgical operation
-# components, excluding the GLFW-based GUI.
+# This CMakeLists.txt creates a Unity plugin DLL by linking against
+# the pre-built static libraries from the Visual Studio build.
 #
 # Prerequisites:
+#   - Build the original SkinFlaps solution first (Build/msvc_2022/SkinFlaps.sln)
 #   - Intel oneAPI Base Toolkit (MKL + TBB)
-#   - CMake 3.17+
-#   - Visual Studio 2019/2022 (Windows) or GCC 9+ (Linux)
-#   - CUDA Toolkit 11+ (optional, for GPU solver)
 #
 # Build Instructions:
 #   mkdir build && cd build
-#   cmake -DCMAKE_BUILD_TYPE=Release ..
+#   cmake -G "Visual Studio 17 2022" -A x64 ../UnityPlugin
 #   cmake --build . --config Release
-#
-# The output DLL will be in: build/Release/SkinFlapsCore.dll (Windows)
-#                            build/libSkinFlapsCore.so (Linux)
-#                            build/libSkinFlapsCore.dylib (macOS)
 ##############################################################################
 
 cmake_minimum_required(VERSION 3.17)
@@ -29,24 +22,28 @@ project(SkinFlapsUnityPlugin
     LANGUAGES CXX
 )
 
-# Build options
-option(SKINFLAPS_USE_CUDA "Enable CUDA GPU solver" OFF)
-option(SKINFLAPS_BUILD_TESTS "Build test executable" OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Root directory
 get_filename_component(SKINFLAPS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
 
-# Set module path for finding Intel libraries
-list(APPEND CMAKE_MODULE_PATH "${SKINFLAPS_ROOT}/PDTetPhysics/cmake")
+# Pre-built library directory (from Visual Studio build)
+set(PREBUILT_LIB_DIR "${SKINFLAPS_ROOT}/Build/msvc_2022/x64/Debug")
+
+# Check if pre-built libraries exist
+if(NOT EXISTS "${PREBUILT_LIB_DIR}/PDTetPhysics_noCuda.lib")
+    message(FATAL_ERROR
+        "Pre-built libraries not found at ${PREBUILT_LIB_DIR}\n"
+        "Please build the original SkinFlaps.sln first using Visual Studio.")
+endif()
+
+message(STATUS "Using pre-built libraries from: ${PREBUILT_LIB_DIR}")
 
 ##############################################################################
-# Find Dependencies
+# Find Intel oneAPI Dependencies
 ##############################################################################
 
-# Intel oneAPI root
 if(NOT DEFINED ONEAPI_ROOT)
     if(DEFINED ENV{ONEAPI_ROOT})
         set(ONEAPI_ROOT "$ENV{ONEAPI_ROOT}")
@@ -56,257 +53,71 @@ if(NOT DEFINED ONEAPI_ROOT)
         set(ONEAPI_ROOT "/opt/intel/oneapi")
     endif()
 endif()
-message(STATUS "ONEAPI_ROOT: ${ONEAPI_ROOT}")
 
-# Intel MKL - Direct configuration (bypass FindMKL.cmake DLL search issues)
+# Intel MKL
 set(MKL_ROOT "${ONEAPI_ROOT}/mkl/latest")
 set(MKL_INCLUDE "${MKL_ROOT}/include")
+set(MKL_LIB_DIR "${MKL_ROOT}/lib")
 
-if(NOT EXISTS "${MKL_INCLUDE}/mkl.h")
-    message(FATAL_ERROR "MKL not found at ${MKL_ROOT}. Please install Intel oneAPI Base Toolkit.")
-endif()
-
-message(STATUS "MKL_ROOT: ${MKL_ROOT}")
-message(STATUS "MKL_INCLUDE: ${MKL_INCLUDE}")
-
-# MKL library paths
 if(WIN32)
-    set(MKL_LIB_DIR "${MKL_ROOT}/lib")
-    set(MKL_LINK_PREFIX
+    set(MKL_LIBS
         "${MKL_LIB_DIR}/mkl_intel_lp64_dll.lib"
         "${MKL_LIB_DIR}/mkl_intel_thread_dll.lib"
         "${MKL_LIB_DIR}/mkl_core_dll.lib"
     )
-    # Find MKL DLLs for deployment
     if(EXISTS "${MKL_ROOT}/bin")
         set(MKL_DLL_DIR "${MKL_ROOT}/bin")
-    elseif(EXISTS "${MKL_ROOT}/redist/intel64")
-        set(MKL_DLL_DIR "${MKL_ROOT}/redist/intel64")
-    else()
-        set(MKL_DLL_DIR "${MKL_ROOT}/../redist/intel64/mkl")
     endif()
-    message(STATUS "MKL_DLL_DIR: ${MKL_DLL_DIR}")
-else()
-    set(MKL_LIB_DIR "${MKL_ROOT}/lib/intel64")
-    set(MKL_LINK_PREFIX
-        "-Wl,--start-group"
-        "${MKL_LIB_DIR}/libmkl_intel_lp64.a"
-        "${MKL_LIB_DIR}/libmkl_intel_thread.a"
-        "${MKL_LIB_DIR}/libmkl_core.a"
-        "-Wl,--end-group"
-    )
 endif()
 
-# Intel OpenMP (IOMP)
+# Intel OpenMP
 set(COMPILER_ROOT "${ONEAPI_ROOT}/compiler/latest")
 if(WIN32)
     set(IOMP_LIB "${COMPILER_ROOT}/lib/libiomp5md.lib")
     set(IOMP_DLL_DIR "${COMPILER_ROOT}/bin")
-    set(OMP_DLLNAME "libiomp5md.dll")
-else()
-    set(IOMP_LIB "${COMPILER_ROOT}/lib/libiomp5.so")
 endif()
 
-if(EXISTS "${IOMP_LIB}")
-    list(APPEND MKL_LINK_PREFIX "${IOMP_LIB}")
-    message(STATUS "IOMP found: ${IOMP_LIB}")
-else()
-    message(WARNING "IOMP not found at ${IOMP_LIB}, using system OpenMP")
-endif()
-
-set(MKL_COPT "")
-
-# Intel TBB - Direct configuration (bypass FindTBB.cmake issues)
+# Intel TBB
 set(TBB_ROOT "${ONEAPI_ROOT}/tbb/latest")
 set(TBB_INCLUDE "${TBB_ROOT}/include")
-message(STATUS "TBB_ROOT: ${TBB_ROOT}")
-
-# Check if TBB CMake config exists and use it
-if(EXISTS "${TBB_ROOT}/lib/cmake/tbb/TBBConfig.cmake")
-    # Temporarily remove PDTetPhysics cmake path to avoid FindTBB.cmake
-    set(_SAVED_MODULE_PATH ${CMAKE_MODULE_PATH})
-    list(REMOVE_ITEM CMAKE_MODULE_PATH "${SKINFLAPS_ROOT}/PDTetPhysics/cmake")
-
-    set(TBB_DIR "${TBB_ROOT}/lib/cmake/tbb")
-    find_package(TBB CONFIG QUIET)
-
-    set(CMAKE_MODULE_PATH ${_SAVED_MODULE_PATH})
-endif()
-
-if(NOT TBB_FOUND)
-    message(STATUS "TBB: Using direct path configuration")
-    set(TBB_FOUND OFF)
-
-    if(WIN32)
-        # Try multiple possible library names for Windows
-        if(EXISTS "${TBB_ROOT}/lib/tbb12.lib")
-            set(TBB_LIB "${TBB_ROOT}/lib/tbb12.lib")
-        elseif(EXISTS "${TBB_ROOT}/lib/intel64/vc14/tbb12.lib")
-            set(TBB_LIB "${TBB_ROOT}/lib/intel64/vc14/tbb12.lib")
-        elseif(EXISTS "${TBB_ROOT}/lib/tbb.lib")
-            set(TBB_LIB "${TBB_ROOT}/lib/tbb.lib")
-        else()
-            # Search for any tbb*.lib
-            file(GLOB TBB_LIB_FILES "${TBB_ROOT}/lib/tbb*.lib" "${TBB_ROOT}/lib/intel64/vc14/tbb*.lib")
-            if(TBB_LIB_FILES)
-                list(GET TBB_LIB_FILES 0 TBB_LIB)
-            endif()
-        endif()
-
-        # Find TBB DLL directory
-        if(EXISTS "${TBB_ROOT}/bin")
-            set(TBB_DLL_DIR "${TBB_ROOT}/bin")
-        elseif(EXISTS "${TBB_ROOT}/redist/intel64/vc14")
-            set(TBB_DLL_DIR "${TBB_ROOT}/redist/intel64/vc14")
-        endif()
-    else()
-        # Linux
-        if(EXISTS "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so.12")
-            set(TBB_LIB "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so.12")
-        elseif(EXISTS "${TBB_ROOT}/lib/libtbb.so.12")
-            set(TBB_LIB "${TBB_ROOT}/lib/libtbb.so.12")
-        else()
-            file(GLOB TBB_LIB_FILES "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so*" "${TBB_ROOT}/lib/libtbb.so*")
-            if(TBB_LIB_FILES)
-                list(GET TBB_LIB_FILES 0 TBB_LIB)
-            endif()
-        endif()
+if(WIN32)
+    if(EXISTS "${TBB_ROOT}/lib/tbb12.lib")
+        set(TBB_LIB "${TBB_ROOT}/lib/tbb12.lib")
     endif()
-
-    if(TBB_LIB)
-        message(STATUS "TBB library: ${TBB_LIB}")
-    else()
-        message(WARNING "TBB library not found. Build may fail.")
-    endif()
-else()
-    message(STATUS "TBB: Found via CMake config")
+    set(TBB_DLL_DIR "${TBB_ROOT}/bin")
 endif()
 
 # OpenMP
 find_package(OpenMP REQUIRED)
 
-# CUDA (optional)
-if(SKINFLAPS_USE_CUDA)
-    find_package(CUDAToolkit 11)
-    if(CUDAToolkit_FOUND)
-        message(STATUS "CUDA found: ${CUDAToolkit_VERSION}")
-    else()
-        message(WARNING "CUDA not found, disabling GPU solver")
-        set(SKINFLAPS_USE_CUDA OFF)
-    endif()
-endif()
-
 ##############################################################################
-# Source Files
+# Pre-built Libraries
 ##############################################################################
 
-# PhysBAM subset - Use GLOB to find all necessary source files
-file(GLOB_RECURSE PHYSBAM_GEOMETRY_SOURCES
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Basic_Geometry/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Basic_Geometry_Intersections/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Collisions/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Implicit_Objects/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Spatial_Acceleration/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Topology/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Topology_Based_Geometry/*.cpp"
-)
-
-file(GLOB_RECURSE PHYSBAM_TOOLS_SOURCES
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Arrays/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Data_Structures/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Grids_Uniform/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Grids_Uniform_Arrays/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Log/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Math_Tools/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Matrices/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Parsing/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Random_Numbers/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Read_Write/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Utilities/*.cpp"
-    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Vectors/*.cpp"
-)
-
-set(PHYSBAM_SOURCES ${PHYSBAM_GEOMETRY_SOURCES} ${PHYSBAM_TOOLS_SOURCES})
-list(LENGTH PHYSBAM_SOURCES PHYSBAM_COUNT)
-message(STATUS "Found ${PHYSBAM_COUNT} PhysBAM source files")
-
-# PD Tet Physics (projective dynamics solver)
-set(PDTETPHYSICS_SOURCES
-    ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/src/GridDeformerTet.cpp
-    ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/src/PardisoWrapper.cpp
-    ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/src/ReshapeDataStructure.cpp
-    ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/src/SchurSolver.cpp
-    ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/src/Add_Force.cpp
-    ${SKINFLAPS_ROOT}/PDTetPhysics/src/PDTetSolver.cpp
-    ${SKINFLAPS_ROOT}/PDTetPhysics/src/MergedLevelSet.cpp
-)
-
-if(SKINFLAPS_USE_CUDA)
-    list(APPEND PDTETPHYSICS_SOURCES
-        ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/src/CudaSolver.cpp
-    )
-endif()
-
-# Graphics (only mesh handling, no OpenGL rendering)
-set(GRAPHICS_SOURCES
-    ${SKINFLAPS_ROOT}/gl3wGraphics/materialTriangles.cpp
-    ${SKINFLAPS_ROOT}/gl3wGraphics/surgGraphics.cpp
-    ${SKINFLAPS_ROOT}/gl3wGraphics/shapes.cpp
-    ${SKINFLAPS_ROOT}/gl3wGraphics/sceneNode.cpp
-)
-
-# Core SkinFlaps simulation
-set(SKINFLAPS_SOURCES
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/bccTetScene.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/vnBccTetrahedra.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/vnBccTetCutter_tbb.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/tetCollisions.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/tetSubset.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/remapTetPhysics.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/skinCutUndermineTets.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/deepCut.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/sutures.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/hooks.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/fence.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/surgicalActions.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/json.cpp
-)
-
-# Unity Plugin interface
-set(UNITYPLUGIN_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/UnityExports.cpp
+set(PREBUILT_LIBS
+    "${PREBUILT_LIB_DIR}/SkinFlaps.lib"
+    "${PREBUILT_LIB_DIR}/PDTetPhysics_noCuda.lib"
+    "${PREBUILT_LIB_DIR}/PhysBAM_subset.lib"
+    "${PREBUILT_LIB_DIR}/gl3wGraphics.lib"
+    "${PREBUILT_LIB_DIR}/imgui_glfw_nfd_lib.lib"
 )
 
 ##############################################################################
-# Build Library
+# Unity Export Wrapper
 ##############################################################################
 
 add_library(SkinFlapsCore SHARED
-    ${PHYSBAM_SOURCES}
-    ${PDTETPHYSICS_SOURCES}
-    ${GRAPHICS_SOURCES}
-    ${SKINFLAPS_SOURCES}
-    ${UNITYPLUGIN_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/UnityExports.cpp
 )
 
 # Compile definitions
 target_compile_definitions(SkinFlapsCore PRIVATE
     SKINFLAPS_DLL_EXPORT
-    ENABLE_AVX_INSTRUCTION_SET
-    _USE_MATH_DEFINES
+    NOMINMAX
+    _ENABLE_EXTENDED_ALIGNED_STORAGE
+    WIN32_LEAN_AND_MEAN
+    NO_CUDA
 )
-
-if(WIN32)
-    target_compile_definitions(SkinFlapsCore PRIVATE
-        NOMINMAX
-        _ENABLE_EXTENDED_ALIGNED_STORAGE
-        WIN32_LEAN_AND_MEAN
-    )
-endif()
-
-if(NOT SKINFLAPS_USE_CUDA)
-    target_compile_definitions(SkinFlapsCore PRIVATE NO_CUDA)
-endif()
 
 # Include directories
 target_include_directories(SkinFlapsCore PRIVATE
@@ -317,13 +128,12 @@ target_include_directories(SkinFlapsCore PRIVATE
     ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/include
     ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library
     ${SKINFLAPS_ROOT}/simd-numeric-kernels-new
+    ${SKINFLAPS_ROOT}/imgui_glfw_nfd_lib
     ${MKL_INCLUDE}
     ${TBB_INCLUDE}
 )
 
 # Compiler options
-target_compile_options(SkinFlapsCore PRIVATE ${MKL_COPT})
-
 if(MSVC)
     target_compile_options(SkinFlapsCore PRIVATE
         /W3
@@ -331,148 +141,73 @@ if(MSVC)
         /fp:fast
         /MP
     )
-else()
-    target_compile_options(SkinFlapsCore PRIVATE
-        -Wall
-        -mavx2
-        -mfma
-        -ffast-math
-        -O3
-    )
 endif()
 
 # Link libraries
 target_link_libraries(SkinFlapsCore PRIVATE
-    ${MKL_LINK_PREFIX}
+    ${PREBUILT_LIBS}
+    ${MKL_LIBS}
+    ${IOMP_LIB}
+    ${TBB_LIB}
     OpenMP::OpenMP_CXX
 )
 
-# TBB linking
-if(TBB_FOUND)
-    target_link_libraries(SkinFlapsCore PRIVATE TBB::tbb)
-else()
-    target_include_directories(SkinFlapsCore PRIVATE ${TBB_INCLUDE})
-    target_link_libraries(SkinFlapsCore PRIVATE ${TBB_LIB})
-endif()
-
-if(SKINFLAPS_USE_CUDA)
+# Additional Windows libraries
+if(WIN32)
     target_link_libraries(SkinFlapsCore PRIVATE
-        CUDA::cudart
-        CUDA::cusolver
-        CUDA::cusparse
+        opengl32
+        gdi32
+        user32
+        shell32
     )
 endif()
 
-# Output name and properties
+# Output settings
 set_target_properties(SkinFlapsCore PROPERTIES
     OUTPUT_NAME "SkinFlapsCore"
-    VERSION ${PROJECT_VERSION}
-    SOVERSION 1
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
-
-# Platform-specific output settings
-if(WIN32)
-    set_target_properties(SkinFlapsCore PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-    )
-elseif(APPLE)
-    set_target_properties(SkinFlapsCore PROPERTIES
-        SUFFIX ".bundle"
-        INSTALL_RPATH "@loader_path"
-    )
-else()
-    set_target_properties(SkinFlapsCore PROPERTIES
-        INSTALL_RPATH "$ORIGIN"
-    )
-endif()
 
 ##############################################################################
-# Install Rules
+# Copy Runtime DLLs
 ##############################################################################
 
-install(TARGETS SkinFlapsCore
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-)
-
-install(FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/UnityExports.h
-    DESTINATION include
-)
-
-# Copy runtime DLLs (Windows) - post-build step
 if(WIN32)
-    # Create a script to copy DLLs after build
-    add_custom_command(TARGET SkinFlapsCore POST_BUILD
-        COMMENT "Copying runtime DLLs..."
-    )
-
     # MKL DLLs
     if(EXISTS "${MKL_DLL_DIR}")
         file(GLOB MKL_DLLS "${MKL_DLL_DIR}/mkl_*.dll")
-        foreach(DLL_FILE ${MKL_DLLS})
+        foreach(DLL ${MKL_DLLS})
             add_custom_command(TARGET SkinFlapsCore POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${DLL_FILE}"
-                    "$<TARGET_FILE_DIR:SkinFlapsCore>"
-            )
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}" "$<TARGET_FILE_DIR:SkinFlapsCore>")
         endforeach()
     endif()
 
     # OpenMP DLL
-    if(EXISTS "${IOMP_DLL_DIR}/${OMP_DLLNAME}")
+    if(EXISTS "${IOMP_DLL_DIR}/libiomp5md.dll")
         add_custom_command(TARGET SkinFlapsCore POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${IOMP_DLL_DIR}/${OMP_DLLNAME}"
-                "$<TARGET_FILE_DIR:SkinFlapsCore>"
-        )
+                "${IOMP_DLL_DIR}/libiomp5md.dll" "$<TARGET_FILE_DIR:SkinFlapsCore>")
     endif()
 
     # TBB DLLs
-    if(DEFINED TBB_DLL_DIR AND EXISTS "${TBB_DLL_DIR}")
+    if(EXISTS "${TBB_DLL_DIR}")
         file(GLOB TBB_DLLS "${TBB_DLL_DIR}/tbb*.dll")
-        foreach(DLL_FILE ${TBB_DLLS})
+        foreach(DLL ${TBB_DLLS})
             add_custom_command(TARGET SkinFlapsCore POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${DLL_FILE}"
-                    "$<TARGET_FILE_DIR:SkinFlapsCore>"
-            )
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}" "$<TARGET_FILE_DIR:SkinFlapsCore>")
         endforeach()
     endif()
-
-    message(STATUS "")
-    message(STATUS "Runtime DLLs will be copied to output directory after build")
 endif()
 
 ##############################################################################
-# Test Executable (optional)
-##############################################################################
-
-if(SKINFLAPS_BUILD_TESTS)
-    add_executable(SkinFlapsTest
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.cpp
-    )
-
-    target_link_libraries(SkinFlapsTest PRIVATE SkinFlapsCore)
-
-    target_include_directories(SkinFlapsTest PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-endif()
-
-##############################################################################
-# Print Configuration Summary
+# Summary
 ##############################################################################
 
 message(STATUS "")
 message(STATUS "SkinFlaps Unity Plugin Configuration:")
-message(STATUS "  Version:        ${PROJECT_VERSION}")
-message(STATUS "  Build Type:     ${CMAKE_BUILD_TYPE}")
-message(STATUS "  C++ Standard:   ${CMAKE_CXX_STANDARD}")
-message(STATUS "  CUDA Support:   ${SKINFLAPS_USE_CUDA}")
-message(STATUS "  MKL Include:    ${MKL_INCLUDE}")
-message(STATUS "  TBB Found:      ${TBB_FOUND}")
+message(STATUS "  Pre-built libs: ${PREBUILT_LIB_DIR}")
+message(STATUS "  MKL:            ${MKL_ROOT}")
+message(STATUS "  TBB:            ${TBB_ROOT}")
 message(STATUS "")
