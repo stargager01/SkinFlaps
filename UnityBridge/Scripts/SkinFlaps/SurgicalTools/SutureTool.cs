@@ -6,9 +6,9 @@
  * Sutures are placed by clicking on two edges of an incision.
  */
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace SkinFlaps.Tools
 {
@@ -240,35 +240,29 @@ namespace SkinFlaps.Tools
 
         private void HandleInput()
         {
-            var mouse = Mouse.current;
-            if (mouse == null)
-                return;
-
-            Vector2 mousePos = mouse.position.ReadValue();
+            Vector3 mousePos = Input.mousePosition;
 
             // Place suture point on click
-            if (mouse.leftButton.wasPressedThisFrame)
+            if (Input.GetMouseButtonDown(0))
             {
                 TryPlaceSuturePoint(mousePos);
             }
 
             // Cancel with right-click or Escape
-            if (mouse.rightButton.wasPressedThisFrame ||
-                (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame))
+            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
             {
                 CancelCurrentSuture();
             }
 
             // Undo with Ctrl+Z
-            if (Keyboard.current != null &&
-                Keyboard.current.ctrlKey.isPressed &&
-                Keyboard.current.zKey.wasPressedThisFrame)
+            if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
+                Input.GetKeyDown(KeyCode.Z))
             {
                 UndoLastSuture();
             }
         }
 
-        private void TryPlaceSuturePoint(Vector2 screenPos)
+        private void TryPlaceSuturePoint(Vector3 screenPos)
         {
             Ray ray = mainCamera.ScreenPointToRay(screenPos);
 
@@ -364,7 +358,7 @@ namespace SkinFlaps.Tools
             }
 
             // Show line from first point to current mouse position
-            Vector2 mousePos = Mouse.current.position.ReadValue();
+            Vector3 mousePos = Input.mousePosition;
             Ray ray = mainCamera.ScreenPointToRay(mousePos);
 
             if (simulator.Raycast(ray, out RaycastHit hit, raycastDistance))

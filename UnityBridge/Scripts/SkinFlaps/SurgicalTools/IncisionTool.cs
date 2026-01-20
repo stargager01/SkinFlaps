@@ -9,7 +9,6 @@
 
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace SkinFlaps.Tools
 {
@@ -218,67 +217,62 @@ namespace SkinFlaps.Tools
 
         private void HandleInput()
         {
-            var mouse = Mouse.current;
-            if (mouse == null)
-                return;
-
-            Vector2 mousePos = mouse.position.ReadValue();
+            Vector3 mousePos = Input.mousePosition;
 
             switch (mode)
             {
                 case IncisionMode.Continuous:
-                    HandleContinuousMode(mouse, mousePos);
+                    HandleContinuousMode(mousePos);
                     break;
 
                 case IncisionMode.PointByPoint:
-                    HandlePointByPointMode(mouse, mousePos);
+                    HandlePointByPointMode(mousePos);
                     break;
             }
 
             // Cancel with right-click or Escape
-            if (mouse.rightButton.wasPressedThisFrame ||
-                (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame))
+            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
             {
                 CancelIncision();
             }
         }
 
-        private void HandleContinuousMode(Mouse mouse, Vector2 mousePos)
+        private void HandleContinuousMode(Vector3 mousePos)
         {
-            if (mouse.leftButton.wasPressedThisFrame)
+            if (Input.GetMouseButtonDown(0))
             {
                 // Start new incision
                 _incisionPoints.Clear();
                 _incisionNormals.Clear();
                 TryAddPointAtScreenPosition(mousePos);
             }
-            else if (mouse.leftButton.isPressed && _isDrawing)
+            else if (Input.GetMouseButton(0) && _isDrawing)
             {
                 // Continue drawing
                 TryAddPointAtScreenPosition(mousePos);
             }
-            else if (mouse.leftButton.wasReleasedThisFrame && _isDrawing)
+            else if (Input.GetMouseButtonUp(0) && _isDrawing)
             {
                 // Finish incision
                 CompleteIncision();
             }
         }
 
-        private void HandlePointByPointMode(Mouse mouse, Vector2 mousePos)
+        private void HandlePointByPointMode(Vector3 mousePos)
         {
-            if (mouse.leftButton.wasPressedThisFrame)
+            if (Input.GetMouseButtonDown(0))
             {
                 TryAddPointAtScreenPosition(mousePos);
             }
 
             // Complete with Enter key
-            if (Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
             {
                 CompleteIncision();
             }
         }
 
-        private void TryAddPointAtScreenPosition(Vector2 screenPos)
+        private void TryAddPointAtScreenPosition(Vector3 screenPos)
         {
             Ray ray = mainCamera.ScreenPointToRay(screenPos);
 

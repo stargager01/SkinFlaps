@@ -8,7 +8,6 @@
 
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace SkinFlaps.Tools
 {
@@ -293,42 +292,38 @@ namespace SkinFlaps.Tools
 
         private void HandleInput()
         {
-            var mouse = Mouse.current;
-            if (mouse == null)
-                return;
-
-            Vector2 mousePos = mouse.position.ReadValue();
+            Vector3 mousePos = Input.mousePosition;
 
             // Left click to place or grab hook
-            if (mouse.leftButton.wasPressedThisFrame)
+            if (Input.GetMouseButtonDown(0))
             {
                 HandleLeftClick(mousePos);
             }
             // Drag while holding
-            else if (mouse.leftButton.isPressed && _draggedHook != null)
+            else if (Input.GetMouseButton(0) && _draggedHook != null)
             {
                 HandleDrag(mousePos);
             }
             // Release to stop dragging
-            else if (mouse.leftButton.wasReleasedThisFrame && _draggedHook != null)
+            else if (Input.GetMouseButtonUp(0) && _draggedHook != null)
             {
                 StopDragging();
             }
 
             // Right click to remove hook
-            if (mouse.rightButton.wasPressedThisFrame)
+            if (Input.GetMouseButtonDown(1))
             {
                 HandleRightClick(mousePos);
             }
 
             // Delete key to remove all hooks
-            if (Keyboard.current != null && Keyboard.current.deleteKey.wasPressedThisFrame)
+            if (Input.GetKeyDown(KeyCode.Delete))
             {
                 ClearAllHooks();
             }
         }
 
-        private void HandleLeftClick(Vector2 screenPos)
+        private void HandleLeftClick(Vector3 screenPos)
         {
             // Check if clicking on existing hook
             ActiveHook clickedHook = FindHookAtScreenPosition(screenPos);
@@ -361,7 +356,7 @@ namespace SkinFlaps.Tools
             }
         }
 
-        private void HandleRightClick(Vector2 screenPos)
+        private void HandleRightClick(Vector3 screenPos)
         {
             ActiveHook clickedHook = FindHookAtScreenPosition(screenPos);
             if (clickedHook != null)
@@ -370,7 +365,7 @@ namespace SkinFlaps.Tools
             }
         }
 
-        private void HandleDrag(Vector2 screenPos)
+        private void HandleDrag(Vector3 screenPos)
         {
             if (_draggedHook == null)
                 return;
@@ -391,7 +386,7 @@ namespace SkinFlaps.Tools
             }
         }
 
-        private void StartDragging(ActiveHook hook, Vector2 screenPos)
+        private void StartDragging(ActiveHook hook, Vector3 screenPos)
         {
             _draggedHook = hook;
             _dragStartPosition = hook.currentPosition;
@@ -426,7 +421,7 @@ namespace SkinFlaps.Tools
             _draggedHook = null;
         }
 
-        private ActiveHook FindHookAtScreenPosition(Vector2 screenPos)
+        private ActiveHook FindHookAtScreenPosition(Vector3 screenPos)
         {
             float closestDist = float.MaxValue;
             ActiveHook closest = null;
