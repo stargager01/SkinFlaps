@@ -111,6 +111,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\SkinFlaps\src\bccTetScene.cpp" />
     <ClCompile Include="..\..\SkinFlaps\src\deepCut.cpp" />
+    <ClCompile Include="..\..\SkinFlaps\src\FacialFlapsGui.cpp" />
     <ClCompile Include="..\..\SkinFlaps\src\fence.cpp" />
     <ClCompile Include="..\..\SkinFlaps\src\hooks.cpp" />
     <ClCompile Include="..\..\SkinFlaps\src\json.cpp" />
