@@ -127,6 +127,7 @@ target_include_directories(SkinFlapsCore PRIVATE
     ${SKINFLAPS_ROOT}/PDTetPhysics/include
     ${SKINFLAPS_ROOT}/PDTetPhysics/PDDeformer/include
     ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library
+    ${SKINFLAPS_ROOT}/PhysBAM_subset/Common_Libraries
     ${SKINFLAPS_ROOT}/simd-numeric-kernels-new
     ${SKINFLAPS_ROOT}/imgui_glfw_nfd_lib
     ${SKINFLAPS_ROOT}/imgui_glfw_nfd_lib/extLibs/gl3w
