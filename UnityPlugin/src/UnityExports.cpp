@@ -113,7 +113,7 @@ SKINFLAPS_API int SF_Initialize(SkinFlapsHandle handle, const SFSimConfig* confi
         if (!ctx->surgActions->loadScene(modelDir.c_str(), ctx->modelFile.c_str())) {
             ctx->lastError = "Failed to load scene: " + modelDir + ctx->modelFile;
             SetGlobalError(ctx->lastError);
-            return SF_ERROR_LOAD_FAILED;
+            return SF_ERROR_FILE_NOT_FOUND;
         }
 
         // Get pointers to internal structures
@@ -125,7 +125,7 @@ SKINFLAPS_API int SF_Initialize(SkinFlapsHandle handle, const SFSimConfig* confi
         if (!ctx->mt) {
             ctx->lastError = "Failed to get material triangles after scene load";
             SetGlobalError(ctx->lastError);
-            return SF_ERROR_LOAD_FAILED;
+            return SF_ERROR_FILE_NOT_FOUND;
         }
 
         ctx->initialized = true;
@@ -137,7 +137,7 @@ SKINFLAPS_API int SF_Initialize(SkinFlapsHandle handle, const SFSimConfig* confi
     catch (const std::exception& e) {
         ctx->lastError = std::string("Initialize exception: ") + e.what();
         SetGlobalError(ctx->lastError);
-        return SF_ERROR_PHYSICS_ERROR;
+        return SF_ERROR_PHYSICS_FAILED;
     }
 }
 
@@ -185,7 +185,7 @@ SKINFLAPS_API int SF_StepSimulation(SkinFlapsHandle handle, float deltaTime) {
     catch (const std::exception& e) {
         ctx->lastError = std::string("StepSimulation error: ") + e.what();
         SetGlobalError(ctx->lastError);
-        return SF_ERROR_PHYSICS_ERROR;
+        return SF_ERROR_PHYSICS_FAILED;
     }
 }
 
@@ -366,7 +366,7 @@ SKINFLAPS_API int SF_PerformIncision(SkinFlapsHandle handle, const SFVector3* po
     catch (const std::exception& e) {
         ctx->lastError = std::string("PerformIncision error: ") + e.what();
         SetGlobalError(ctx->lastError);
-        return SF_ERROR_PHYSICS_ERROR;
+        return SF_ERROR_PHYSICS_FAILED;
     }
 }
 
@@ -458,7 +458,7 @@ SKINFLAPS_API int SF_GetSutureCount(SkinFlapsHandle handle) {
     sutures* sut = ctx->surgActions->getSutures();
     if (!sut) return 0;
 
-    return sut->numberOfSutures();
+    return sut->getNumberOfSutures();
 }
 
 // ============================================================================
