@@ -46,19 +46,91 @@ list(APPEND CMAKE_MODULE_PATH "${SKINFLAPS_ROOT}/PDTetPhysics/cmake")
 # Find Dependencies
 ##############################################################################
 
-# Intel MKL
-set(TARGET_INTERFACE "lp64")
-set(TARGET_THREADING "intel_omp")
-find_package(MKL MODULE REQUIRED)
+# Intel oneAPI root
+if(NOT DEFINED ONEAPI_ROOT)
+    if(DEFINED ENV{ONEAPI_ROOT})
+        set(ONEAPI_ROOT "$ENV{ONEAPI_ROOT}")
+    elseif(WIN32)
+        set(ONEAPI_ROOT "C:/Program Files (x86)/Intel/oneAPI")
+    else()
+        set(ONEAPI_ROOT "/opt/intel/oneapi")
+    endif()
+endif()
+message(STATUS "ONEAPI_ROOT: ${ONEAPI_ROOT}")
+
+# Intel MKL - Direct configuration (bypass FindMKL.cmake DLL search issues)
+set(MKL_ROOT "${ONEAPI_ROOT}/mkl/latest")
+set(MKL_INCLUDE "${MKL_ROOT}/include")
+
+if(NOT EXISTS "${MKL_INCLUDE}/mkl.h")
+    message(FATAL_ERROR "MKL not found at ${MKL_ROOT}. Please install Intel oneAPI Base Toolkit.")
+endif()
+
+message(STATUS "MKL_ROOT: ${MKL_ROOT}")
+message(STATUS "MKL_INCLUDE: ${MKL_INCLUDE}")
+
+# MKL library paths
+if(WIN32)
+    set(MKL_LIB_DIR "${MKL_ROOT}/lib")
+    set(MKL_LINK_PREFIX
+        "${MKL_LIB_DIR}/mkl_intel_lp64_dll.lib"
+        "${MKL_LIB_DIR}/mkl_intel_thread_dll.lib"
+        "${MKL_LIB_DIR}/mkl_core_dll.lib"
+    )
+    # Find MKL DLLs for deployment
+    if(EXISTS "${MKL_ROOT}/bin")
+        set(MKL_DLL_DIR "${MKL_ROOT}/bin")
+    elseif(EXISTS "${MKL_ROOT}/redist/intel64")
+        set(MKL_DLL_DIR "${MKL_ROOT}/redist/intel64")
+    else()
+        set(MKL_DLL_DIR "${MKL_ROOT}/../redist/intel64/mkl")
+    endif()
+    message(STATUS "MKL_DLL_DIR: ${MKL_DLL_DIR}")
+else()
+    set(MKL_LIB_DIR "${MKL_ROOT}/lib/intel64")
+    set(MKL_LINK_PREFIX
+        "-Wl,--start-group"
+        "${MKL_LIB_DIR}/libmkl_intel_lp64.a"
+        "${MKL_LIB_DIR}/libmkl_intel_thread.a"
+        "${MKL_LIB_DIR}/libmkl_core.a"
+        "-Wl,--end-group"
+    )
+endif()
+
+# Intel OpenMP (IOMP)
+set(COMPILER_ROOT "${ONEAPI_ROOT}/compiler/latest")
+if(WIN32)
+    set(IOMP_LIB "${COMPILER_ROOT}/lib/libiomp5md.lib")
+    set(IOMP_DLL_DIR "${COMPILER_ROOT}/bin")
+    set(OMP_DLLNAME "libiomp5md.dll")
+else()
+    set(IOMP_LIB "${COMPILER_ROOT}/lib/libiomp5.so")
+endif()
+
+if(EXISTS "${IOMP_LIB}")
+    list(APPEND MKL_LINK_PREFIX "${IOMP_LIB}")
+    message(STATUS "IOMP found: ${IOMP_LIB}")
+else()
+    message(WARNING "IOMP not found at ${IOMP_LIB}, using system OpenMP")
+endif()
+
+set(MKL_COPT "")
 
 # Intel TBB
+set(TBB_ROOT "${ONEAPI_ROOT}/tbb/latest")
+if(EXISTS "${TBB_ROOT}/lib/cmake/tbb/TBBConfig.cmake")
+    set(TBB_DIR "${TBB_ROOT}/lib/cmake/tbb")
+endif()
 find_package(TBB QUIET)
 if(NOT TBB_FOUND)
-    # Fallback: look for TBB in oneAPI installation
-    if(DEFINED ENV{ONEAPI_ROOT})
-        set(TBB_DIR "$ENV{ONEAPI_ROOT}/tbb/latest/lib/cmake/tbb")
+    message(STATUS "TBB not found via CMake, using direct paths")
+    set(TBB_INCLUDE "${TBB_ROOT}/include")
+    if(WIN32)
+        set(TBB_LIB "${TBB_ROOT}/lib/tbb12.lib")
+        set(TBB_DLL_DIR "${TBB_ROOT}/bin")
+    else()
+        set(TBB_LIB "${TBB_ROOT}/lib/intel64/gcc4.8/libtbb.so.12")
     endif()
-    find_package(TBB REQUIRED)
 endif()
 
 # OpenMP
@@ -205,9 +277,16 @@ endif()
 # Link libraries
 target_link_libraries(SkinFlapsCore PRIVATE
     ${MKL_LINK_PREFIX}
-    TBB::tbb
     OpenMP::OpenMP_CXX
 )
+
+# TBB linking
+if(TBB_FOUND)
+    target_link_libraries(SkinFlapsCore PRIVATE TBB::tbb)
+else()
+    target_include_directories(SkinFlapsCore PRIVATE ${TBB_INCLUDE})
+    target_link_libraries(SkinFlapsCore PRIVATE ${TBB_LIB})
+endif()
 
 if(SKINFLAPS_USE_CUDA)
     target_link_libraries(SkinFlapsCore PRIVATE
@@ -257,14 +336,48 @@ install(FILES
     DESTINATION include
 )
 
-# Copy MKL runtime DLLs (Windows)
-if(WIN32 AND MKL_DLL_DIR)
-    file(GLOB MKL_DLLS "${MKL_DLL_DIR}/mkl_*.dll")
-    install(FILES ${MKL_DLLS} DESTINATION bin)
+# Copy runtime DLLs (Windows) - post-build step
+if(WIN32)
+    # Create a script to copy DLLs after build
+    add_custom_command(TARGET SkinFlapsCore POST_BUILD
+        COMMENT "Copying runtime DLLs..."
+    )
 
-    if(IOMP_DLL_DIR AND OMP_DLLNAME)
-        install(FILES "${IOMP_DLL_DIR}/${OMP_DLLNAME}" DESTINATION bin)
+    # MKL DLLs
+    if(EXISTS "${MKL_DLL_DIR}")
+        file(GLOB MKL_DLLS "${MKL_DLL_DIR}/mkl_*.dll")
+        foreach(DLL_FILE ${MKL_DLLS})
+            add_custom_command(TARGET SkinFlapsCore POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${DLL_FILE}"
+                    "$<TARGET_FILE_DIR:SkinFlapsCore>"
+            )
+        endforeach()
     endif()
+
+    # OpenMP DLL
+    if(EXISTS "${IOMP_DLL_DIR}/${OMP_DLLNAME}")
+        add_custom_command(TARGET SkinFlapsCore POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${IOMP_DLL_DIR}/${OMP_DLLNAME}"
+                "$<TARGET_FILE_DIR:SkinFlapsCore>"
+        )
+    endif()
+
+    # TBB DLLs
+    if(DEFINED TBB_DLL_DIR AND EXISTS "${TBB_DLL_DIR}")
+        file(GLOB TBB_DLLS "${TBB_DLL_DIR}/tbb*.dll")
+        foreach(DLL_FILE ${TBB_DLLS})
+            add_custom_command(TARGET SkinFlapsCore POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${DLL_FILE}"
+                    "$<TARGET_FILE_DIR:SkinFlapsCore>"
+            )
+        endforeach()
+    endif()
+
+    message(STATUS "")
+    message(STATUS "Runtime DLLs will be copied to output directory after build")
 endif()
 
 ##############################################################################
