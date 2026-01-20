@@ -200,18 +200,35 @@ endif()
 # Source Files
 ##############################################################################
 
-# PhysBAM subset (core geometry utilities)
-set(PHYSBAM_SOURCES
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Arrays/ARRAY_BASE.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Geometry/BASIC_GEOMETRY.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Geometry/PLANE.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Geometry/SEGMENT_3D.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Geometry/TETRAHEDRON.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Geometry/TRIANGLE_3D.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Matrices_And_Vectors/MATRIX_3X3.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Matrices_And_Vectors/VECTOR_3D.cpp
-    ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/Utilities/LOG.cpp
+# PhysBAM subset - Use GLOB to find all necessary source files
+file(GLOB_RECURSE PHYSBAM_GEOMETRY_SOURCES
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Basic_Geometry/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Basic_Geometry_Intersections/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Collisions/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Implicit_Objects/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Spatial_Acceleration/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Topology/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Geometry/Topology_Based_Geometry/*.cpp"
 )
+
+file(GLOB_RECURSE PHYSBAM_TOOLS_SOURCES
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Arrays/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Data_Structures/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Grids_Uniform/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Grids_Uniform_Arrays/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Log/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Math_Tools/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Matrices/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Parsing/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Random_Numbers/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Read_Write/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Utilities/*.cpp"
+    "${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library/PhysBAM_Tools/Vectors/*.cpp"
+)
+
+set(PHYSBAM_SOURCES ${PHYSBAM_GEOMETRY_SOURCES} ${PHYSBAM_TOOLS_SOURCES})
+list(LENGTH PHYSBAM_SOURCES PHYSBAM_COUNT)
+message(STATUS "Found ${PHYSBAM_COUNT} PhysBAM source files")
 
 # PD Tet Physics (projective dynamics solver)
 set(PDTETPHYSICS_SOURCES
@@ -252,7 +269,7 @@ set(SKINFLAPS_SOURCES
     ${SKINFLAPS_ROOT}/SkinFlaps/src/hooks.cpp
     ${SKINFLAPS_ROOT}/SkinFlaps/src/fence.cpp
     ${SKINFLAPS_ROOT}/SkinFlaps/src/surgicalActions.cpp
-    ${SKINFLAPS_ROOT}/SkinFlaps/src/boundingBox.cpp
+    ${SKINFLAPS_ROOT}/SkinFlaps/src/json.cpp
 )
 
 # Unity Plugin interface
@@ -301,6 +318,7 @@ target_include_directories(SkinFlapsCore PRIVATE
     ${SKINFLAPS_ROOT}/PhysBAM_subset/Public_Library
     ${SKINFLAPS_ROOT}/simd-numeric-kernels-new
     ${MKL_INCLUDE}
+    ${TBB_INCLUDE}
 )
 
 # Compiler options
