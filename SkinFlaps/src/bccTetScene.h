@@ -40,6 +40,8 @@ public:
 	inline void setForcesAppliedFlag(){ _forcesApplied = true; }
 	inline void promoteSutures() { _ptp.promoteAllSutures(); _ptp.initializePhysics(); }
 	vnBccTetrahedra* getVirtualNodedBccTetrahedra() { return &_vnTets; }
+	materialTriangles* getMaterialTriangles() { return _mt; }
+	int getTetCount() { return _vnTets.tetNumber(); }
 	void setVisability(char surface, char physics);	// 0=off, 1=on, 2=don't change
 	void setGl3wGraphics(gl3wGraphics *gl3w) { _gl3w = gl3w; }
 	void createTetLatticeDrawing();
