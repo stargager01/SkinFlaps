@@ -248,19 +248,19 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	else
 		;
-	// Parse optional "facialRegions" section for region-specific stretch limits (README Issue #1).
+	// Parse optional "tissueRegions" section for region-specific stretch limits (README Issue #1).
 	// Each region entry maps a named facial region to its stretch properties and an optional
 	// closed manifold OBJ file that spatially defines the region within the tet lattice.
 	// Example JSON:
-	//   "facialRegions" : {
+	//   "tissueRegions" : {
 	//       "cheek" : { "minStrain": 0.6, "maxStrain": 2.0, "subsetObj": "cheekRegion.obj" },
 	//       "scalp" : { "minStrain": 0.85, "maxStrain": 1.0, "lowTetWeight": 800, "highTetWeight": 1800 }
 	//   }
-	// If no facialRegions section is present, default region properties are loaded automatically.
-	if ((oit = scnObj.find("facialRegions")) != scnObj.end()) {
+	// If no tissueRegions section is present, default region properties are loaded automatically.
+	if ((oit = scnObj.find("tissueRegions")) != scnObj.end()) {
 		json::Object regObj = oit->second.ToObject();
 		for (suboit = regObj.begin(); suboit != regObj.end(); ++suboit) {
-			facialRegionProperties rp;
+			tissueRegionProperties rp;
 			rp.name = suboit->first;
 			rp.stretchMin = _globalStretchMin;  // default to global values
 			rp.stretchMax = _globalStretchMax;
@@ -284,7 +284,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		}
 	}
 	else {
-		// No facialRegions section in scene file - load clinically-informed defaults.
+		// No tissueRegions section in scene file - load clinically-informed defaults.
 		_regionProperties = getDefaultRegionProperties();
 	}
 	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // now creating operable lattice on load
@@ -609,7 +609,7 @@ bccTetScene::bccTetScene() : _physicsPaused(false), _forcesApplied(false), _tets
 // Region-specific stretch limit methods (README Issue #1)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::vector<facialRegionProperties> bccTetScene::getDefaultRegionProperties() {
+std::vector<tissueRegionProperties> bccTetScene::getDefaultRegionProperties() {
 	// Clinically-informed default stretch properties for common facial regions.
 	// These values reflect known differences in skin extensibility across the face:
 	//
@@ -630,39 +630,39 @@ std::vector<facialRegionProperties> bccTetScene::getDefaultRegionProperties() {
 	//
 	// subsetObjFile: left empty in defaults. To spatially map a region, the user should
 	// create a closed manifold OBJ that encloses the facial region tets and set this path
-	// via setRegionProperties() or the "facialRegions" section of the .smd file.
+	// via setRegionProperties() or the "tissueRegions" section of the .smd file.
 	// The existing tetSubset::createSubset() mechanism will then identify which tets fall
 	// inside that manifold and apply the region's strain limits to them.
 
-	std::vector<facialRegionProperties> defaults;
+	std::vector<tissueRegionProperties> defaults;
 
 	// Cheek: loose, mobile skin with significant subcutaneous fat. High extensibility.
 	// Surgically, cheek advancement flaps routinely stretch 50-100% beyond rest length.
-	defaults.push_back(facialRegionProperties("cheek", 0.5f, 2.0f));
+	defaults.push_back(tissueRegionProperties("cheek", 0.5f, 2.0f));
 
 	// Eyelid: very thin skin with minimal subcutaneous tissue. Highly elastic.
 	// Eyelid skin is the thinnest in the body and stretches readily.
-	defaults.push_back(facialRegionProperties("eyelid", 0.5f, 2.0f));
+	defaults.push_back(tissueRegionProperties("eyelid", 0.5f, 2.0f));
 
 	// Forehead: moderately thick skin adherent to frontalis muscle via galea.
 	// Moderate extensibility - can be stretched but less than cheek.
-	defaults.push_back(facialRegionProperties("forehead", 0.75f, 1.2f));
+	defaults.push_back(tissueRegionProperties("forehead", 0.75f, 1.2f));
 
 	// Scalp: thick skin firmly bound to galea aponeurotica.
 	// Very limited stretch without galeal scoring. Among the least extensible facial skin.
-	defaults.push_back(facialRegionProperties("scalp", 0.85f, 1.0f));
+	defaults.push_back(tissueRegionProperties("scalp", 0.85f, 1.0f));
 
 	// Nose: skin tightly adherent to underlying cartilage and bone framework.
 	// Minimal extensibility, especially over the dorsum and tip.
-	defaults.push_back(facialRegionProperties("nose", 0.85f, 1.0f));
+	defaults.push_back(tissueRegionProperties("nose", 0.85f, 1.0f));
 
 	// Lip: moderately elastic skin and mucosa with underlying orbicularis oris muscle.
 	// Moderate extensibility, between cheek and forehead.
-	defaults.push_back(facialRegionProperties("lip", 0.6f, 1.5f));
+	defaults.push_back(tissueRegionProperties("lip", 0.6f, 1.5f));
 
 	// Periorbital: skin around the orbit, thicker than eyelid but thinner than forehead.
 	// Moderate-to-high extensibility.
-	defaults.push_back(facialRegionProperties("periorbital", 0.6f, 1.6f));
+	defaults.push_back(tissueRegionProperties("periorbital", 0.6f, 1.6f));
 
 	return defaults;
 }
@@ -676,10 +676,10 @@ void bccTetScene::setRegionStretchLimit(const std::string& regionName, float str
 		}
 	}
 	// Region not found - create a new entry with the given stretch limits.
-	_regionProperties.push_back(facialRegionProperties(regionName, stretchMin, stretchMax));
+	_regionProperties.push_back(tissueRegionProperties(regionName, stretchMin, stretchMax));
 }
 
-void bccTetScene::setRegionProperties(const facialRegionProperties& props) {
+void bccTetScene::setRegionProperties(const tissueRegionProperties& props) {
 	for (auto& rp : _regionProperties) {
 		if (rp.name == props.name) {
 			rp = props;
@@ -690,7 +690,7 @@ void bccTetScene::setRegionProperties(const facialRegionProperties& props) {
 	_regionProperties.push_back(props);
 }
 
-const facialRegionProperties* bccTetScene::getRegionProperties(const std::string& regionName) const {
+const tissueRegionProperties* bccTetScene::getRegionProperties(const std::string& regionName) const {
 	for (const auto& rp : _regionProperties) {
 		if (rp.name == regionName)
 			return &rp;

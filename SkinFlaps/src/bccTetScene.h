@@ -37,7 +37,7 @@ class surgicalActions;
  * Each region can optionally reference a closed manifold OBJ file (subsetObjFile)
  * that encloses the tet cluster belonging to that region for spatial mapping.
  */
-struct facialRegionProperties {
+struct tissueRegionProperties {
 	std::string name;           ///< Region identifier, e.g. "cheek", "forehead", "eyelid", "scalp", "nose"
 	float stretchMin;           ///< Minimum strain limit (compression). Lower = more compression allowed.
 	float stretchMax;           ///< Maximum strain limit (extension). Higher = more stretch allowed.
@@ -45,11 +45,11 @@ struct facialRegionProperties {
 	float highTetWeight;        ///< Region-specific high tet stiffness weight. 0 means use global default.
 	std::string subsetObjFile;  ///< Optional path to closed manifold OBJ defining the spatial extent of this region.
 
-	facialRegionProperties()
+	tissueRegionProperties()
 		: name(""), stretchMin(0.0f), stretchMax(0.0f),
 		  lowTetWeight(0.0f), highTetWeight(0.0f), subsetObjFile("") {}
 
-	facialRegionProperties(const std::string& regionName, float sMin, float sMax,
+	tissueRegionProperties(const std::string& regionName, float sMin, float sMax,
 	                       float lowW = 0.0f, float highW = 0.0f, const std::string& objFile = "")
 		: name(regionName), stretchMin(sMin), stretchMax(sMax),
 		  lowTetWeight(lowW), highTetWeight(highW), subsetObjFile(objFile) {}
@@ -114,7 +114,7 @@ public:
 	 * Provides baseline values for cheek, eyelid, forehead, scalp, and nose regions
 	 * based on known surgical tissue extensibility characteristics.
 	 */
-	static std::vector<facialRegionProperties> getDefaultRegionProperties();
+	static std::vector<tissueRegionProperties> getDefaultRegionProperties();
 
 	/** @brief Set stretch limits for a specific named facial region.
 	 *  @param regionName  Identifier such as "cheek", "scalp", etc.
@@ -126,14 +126,14 @@ public:
 	void setRegionStretchLimit(const std::string& regionName, float stretchMin, float stretchMax);
 
 	/** @brief Set full properties (stretch limits and stiffness) for a named region.
-	 *  @param props  A fully populated facialRegionProperties struct.
+	 *  @param props  A fully populated tissueRegionProperties struct.
 	 */
-	void setRegionProperties(const facialRegionProperties& props);
+	void setRegionProperties(const tissueRegionProperties& props);
 
 	/** @brief Retrieve properties for a named region.
 	 *  @return Pointer to the region's properties, or nullptr if the region is not found.
 	 */
-	const facialRegionProperties* getRegionProperties(const std::string& regionName) const;
+	const tissueRegionProperties* getRegionProperties(const std::string& regionName) const;
 
 	/** @brief Override all regions with a single uniform stretch limit.
 	 *  @param stretchMin  Global minimum strain limit.
@@ -142,7 +142,7 @@ public:
 	void setGlobalStretchLimit(float stretchMin, float stretchMax);
 
 	/// @brief Return a const reference to all currently configured region properties.
-	const std::vector<facialRegionProperties>& getAllRegionProperties() const { return _regionProperties; }
+	const std::vector<tissueRegionProperties>& getAllRegionProperties() const { return _regionProperties; }
 
 	bccTetScene();
 	~bccTetScene();
@@ -161,7 +161,7 @@ private:
 	float _lowTetWeight;
 
 	// --- Region-specific stretch properties ---
-	std::vector<facialRegionProperties> _regionProperties;
+	std::vector<tissueRegionProperties> _regionProperties;
 	// Global fallback stretch limits (used when no region-specific override applies).
 	// These are loaded from the "tetrahedralProperties" section of the .smd file.
 	float _globalStretchMin;

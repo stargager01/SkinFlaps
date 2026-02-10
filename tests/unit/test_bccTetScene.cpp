@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////
 // File: test_bccTetScene.cpp
-// Purpose: Unit tests for the facialRegionProperties system introduced
+// Purpose: Unit tests for the tissueRegionProperties system introduced
 //          in bccTetScene to address README Issue #1 (region-specific
 //          stretch limits). These tests verify:
 //          - getDefaultRegionProperties() returns the expected 7 regions
@@ -20,12 +20,12 @@
 #include <cmath>
 
 // ---------------------------------------------------------------------------
-// Standalone replica of facialRegionProperties and the region management
+// Standalone replica of tissueRegionProperties and the region management
 // methods from bccTetScene. This avoids linking against the full project
 // while testing the exact same algorithmic logic.
 // ---------------------------------------------------------------------------
 
-struct facialRegionProperties {
+struct tissueRegionProperties {
     std::string name;
     float stretchMin;
     float stretchMax;
@@ -33,11 +33,11 @@ struct facialRegionProperties {
     float highTetWeight;
     std::string subsetObjFile;
 
-    facialRegionProperties()
+    tissueRegionProperties()
         : name(""), stretchMin(0.0f), stretchMax(0.0f),
           lowTetWeight(0.0f), highTetWeight(0.0f), subsetObjFile("") {}
 
-    facialRegionProperties(const std::string& regionName, float sMin, float sMax,
+    tissueRegionProperties(const std::string& regionName, float sMin, float sMax,
                            float lowW = 0.0f, float highW = 0.0f, const std::string& objFile = "")
         : name(regionName), stretchMin(sMin), stretchMax(sMax),
           lowTetWeight(lowW), highTetWeight(highW), subsetObjFile(objFile) {}
@@ -52,15 +52,15 @@ public:
 
     // Reimplementation of bccTetScene::getDefaultRegionProperties()
     // from bccTetScene.cpp lines 612-668.
-    static std::vector<facialRegionProperties> getDefaultRegionProperties() {
-        std::vector<facialRegionProperties> defaults;
-        defaults.push_back(facialRegionProperties("cheek", 0.5f, 2.0f));
-        defaults.push_back(facialRegionProperties("eyelid", 0.5f, 2.0f));
-        defaults.push_back(facialRegionProperties("forehead", 0.75f, 1.2f));
-        defaults.push_back(facialRegionProperties("scalp", 0.85f, 1.0f));
-        defaults.push_back(facialRegionProperties("nose", 0.85f, 1.0f));
-        defaults.push_back(facialRegionProperties("lip", 0.6f, 1.5f));
-        defaults.push_back(facialRegionProperties("periorbital", 0.6f, 1.6f));
+    static std::vector<tissueRegionProperties> getDefaultRegionProperties() {
+        std::vector<tissueRegionProperties> defaults;
+        defaults.push_back(tissueRegionProperties("cheek", 0.5f, 2.0f));
+        defaults.push_back(tissueRegionProperties("eyelid", 0.5f, 2.0f));
+        defaults.push_back(tissueRegionProperties("forehead", 0.75f, 1.2f));
+        defaults.push_back(tissueRegionProperties("scalp", 0.85f, 1.0f));
+        defaults.push_back(tissueRegionProperties("nose", 0.85f, 1.0f));
+        defaults.push_back(tissueRegionProperties("lip", 0.6f, 1.5f));
+        defaults.push_back(tissueRegionProperties("periorbital", 0.6f, 1.6f));
         return defaults;
     }
 
@@ -74,12 +74,12 @@ public:
                 return;
             }
         }
-        _regionProperties.push_back(facialRegionProperties(regionName, stretchMin, stretchMax));
+        _regionProperties.push_back(tissueRegionProperties(regionName, stretchMin, stretchMax));
     }
 
     // Reimplementation of bccTetScene::setRegionProperties()
     // from bccTetScene.cpp lines 682-691.
-    void setRegionProperties(const facialRegionProperties& props) {
+    void setRegionProperties(const tissueRegionProperties& props) {
         for (auto& rp : _regionProperties) {
             if (rp.name == props.name) {
                 rp = props;
@@ -91,7 +91,7 @@ public:
 
     // Reimplementation of bccTetScene::getRegionProperties()
     // from bccTetScene.cpp lines 693-699.
-    const facialRegionProperties* getRegionProperties(const std::string& regionName) const {
+    const tissueRegionProperties* getRegionProperties(const std::string& regionName) const {
         for (const auto& rp : _regionProperties) {
             if (rp.name == regionName)
                 return &rp;
@@ -110,18 +110,18 @@ public:
         }
     }
 
-    const std::vector<facialRegionProperties>& getAllRegionProperties() const { return _regionProperties; }
+    const std::vector<tissueRegionProperties>& getAllRegionProperties() const { return _regionProperties; }
     float getGlobalStretchMin() const { return _globalStretchMin; }
     float getGlobalStretchMax() const { return _globalStretchMax; }
 
     // Initialize with default regions (simulates what loadScene does when
-    // no "facialRegions" section is present in the .smd file).
+    // no "tissueRegions" section is present in the .smd file).
     void loadDefaults() {
         _regionProperties = getDefaultRegionProperties();
     }
 
 private:
-    std::vector<facialRegionProperties> _regionProperties;
+    std::vector<tissueRegionProperties> _regionProperties;
     float _globalStretchMin;
     float _globalStretchMax;
     float _globalLowTetWeight;
@@ -137,7 +137,7 @@ private:
 
 class DefaultRegionPropertiesTest : public ::testing::Test {
 protected:
-    std::vector<facialRegionProperties> defaults;
+    std::vector<tissueRegionProperties> defaults;
 
     void SetUp() override {
         defaults = RegionManager::getDefaultRegionProperties();
@@ -172,7 +172,7 @@ TEST_F(DefaultRegionPropertiesTest, AllRegionNamesAreUnique) {
 TEST_F(DefaultRegionPropertiesTest, CheekHasHighExtensibility) {
     // Cheek skin is loose and mobile; it should have the lowest stretchMin
     // and highest stretchMax among common regions.
-    const facialRegionProperties* cheek = nullptr;
+    const tissueRegionProperties* cheek = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "cheek") { cheek = &rp; break; }
     }
@@ -183,7 +183,7 @@ TEST_F(DefaultRegionPropertiesTest, CheekHasHighExtensibility) {
 
 TEST_F(DefaultRegionPropertiesTest, EyelidHasHighExtensibility) {
     // Eyelid skin is the thinnest in the body and very elastic.
-    const facialRegionProperties* eyelid = nullptr;
+    const tissueRegionProperties* eyelid = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "eyelid") { eyelid = &rp; break; }
     }
@@ -194,7 +194,7 @@ TEST_F(DefaultRegionPropertiesTest, EyelidHasHighExtensibility) {
 
 TEST_F(DefaultRegionPropertiesTest, ScalpHasLowExtensibility) {
     // Scalp skin is bound by the galea aponeurotica, limiting stretch.
-    const facialRegionProperties* scalp = nullptr;
+    const tissueRegionProperties* scalp = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "scalp") { scalp = &rp; break; }
     }
@@ -205,7 +205,7 @@ TEST_F(DefaultRegionPropertiesTest, ScalpHasLowExtensibility) {
 
 TEST_F(DefaultRegionPropertiesTest, NoseHasLowExtensibility) {
     // Nose skin is tightly bound to cartilage, very limited stretch.
-    const facialRegionProperties* nose = nullptr;
+    const tissueRegionProperties* nose = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "nose") { nose = &rp; break; }
     }
@@ -216,7 +216,7 @@ TEST_F(DefaultRegionPropertiesTest, NoseHasLowExtensibility) {
 
 TEST_F(DefaultRegionPropertiesTest, ForeheadHasModerateExtensibility) {
     // Forehead skin is moderately adherent to frontalis.
-    const facialRegionProperties* forehead = nullptr;
+    const tissueRegionProperties* forehead = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "forehead") { forehead = &rp; break; }
     }
@@ -226,7 +226,7 @@ TEST_F(DefaultRegionPropertiesTest, ForeheadHasModerateExtensibility) {
 }
 
 TEST_F(DefaultRegionPropertiesTest, LipRegionExists) {
-    const facialRegionProperties* lip = nullptr;
+    const tissueRegionProperties* lip = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "lip") { lip = &rp; break; }
     }
@@ -236,7 +236,7 @@ TEST_F(DefaultRegionPropertiesTest, LipRegionExists) {
 }
 
 TEST_F(DefaultRegionPropertiesTest, PeriorbitalRegionExists) {
-    const facialRegionProperties* periorbital = nullptr;
+    const tissueRegionProperties* periorbital = nullptr;
     for (const auto& rp : defaults) {
         if (rp.name == "periorbital") { periorbital = &rp; break; }
     }
@@ -308,7 +308,7 @@ TEST_F(SetRegionStretchLimitTest, UpdateExistingRegion) {
 
 TEST_F(SetRegionStretchLimitTest, UpdateDoesNotChangeOtherProperties) {
     // Updating stretch limits should not change lowTetWeight, highTetWeight, or subsetObjFile.
-    rm.setRegionProperties(facialRegionProperties("cheek", 0.5f, 2.0f, 100.0f, 200.0f, "cheek.obj"));
+    rm.setRegionProperties(tissueRegionProperties("cheek", 0.5f, 2.0f, 100.0f, 200.0f, "cheek.obj"));
     rm.setRegionStretchLimit("cheek", 0.7f, 1.8f);
     const auto* cheek = rm.getRegionProperties("cheek");
     ASSERT_NE(cheek, nullptr);
@@ -420,7 +420,7 @@ TEST_F(SetGlobalStretchLimitTest, SubsequentRegionUpdateOverridesGlobal) {
 TEST_F(SetGlobalStretchLimitTest, DoesNotAffectTetWeights) {
     // setGlobalStretchLimit should only change stretch limits,
     // not tet weight properties.
-    rm.setRegionProperties(facialRegionProperties("forehead", 0.75f, 1.2f, 300.0f, 600.0f));
+    rm.setRegionProperties(tissueRegionProperties("forehead", 0.75f, 1.2f, 300.0f, 600.0f));
     rm.setGlobalStretchLimit(0.9f, 1.1f);
 
     const auto* forehead = rm.getRegionProperties("forehead");
@@ -534,7 +534,7 @@ protected:
 
 TEST_F(SetRegionPropertiesTest, FullUpdateReplacesAllFields) {
     // setRegionProperties should replace all fields of an existing region.
-    facialRegionProperties newProps("cheek", 0.6f, 1.8f, 400.0f, 800.0f, "/path/to/cheek.obj");
+    tissueRegionProperties newProps("cheek", 0.6f, 1.8f, 400.0f, 800.0f, "/path/to/cheek.obj");
     rm.setRegionProperties(newProps);
 
     const auto* cheek = rm.getRegionProperties("cheek");
@@ -548,7 +548,7 @@ TEST_F(SetRegionPropertiesTest, FullUpdateReplacesAllFields) {
 
 TEST_F(SetRegionPropertiesTest, CreatesNewRegionIfNotFound) {
     // If the named region doesn't exist, setRegionProperties should add it.
-    facialRegionProperties newRegion("chin", 0.65f, 1.35f, 350.0f, 700.0f, "");
+    tissueRegionProperties newRegion("chin", 0.65f, 1.35f, 350.0f, 700.0f, "");
     rm.setRegionProperties(newRegion);
     EXPECT_EQ(rm.getAllRegionProperties().size(), 8u);
 
@@ -561,7 +561,7 @@ TEST_F(SetRegionPropertiesTest, CreatesNewRegionIfNotFound) {
 TEST_F(SetRegionPropertiesTest, DoesNotDuplicateOnUpdate) {
     // Updating an existing region should not add a duplicate.
     size_t before = rm.getAllRegionProperties().size();
-    facialRegionProperties updated("scalp", 0.9f, 1.05f, 700.0f, 1500.0f, "");
+    tissueRegionProperties updated("scalp", 0.9f, 1.05f, 700.0f, 1500.0f, "");
     rm.setRegionProperties(updated);
     EXPECT_EQ(rm.getAllRegionProperties().size(), before);
 }
@@ -569,14 +569,14 @@ TEST_F(SetRegionPropertiesTest, DoesNotDuplicateOnUpdate) {
 
 // ===========================================================================
 // TEST SUITE: FacialRegionProperties struct
-// Tests for the facialRegionProperties struct itself.
+// Tests for the tissueRegionProperties struct itself.
 // ===========================================================================
 
-class FacialRegionPropertiesStructTest : public ::testing::Test {};
+class TissueRegionPropertiesStructTest : public ::testing::Test {};
 
-TEST_F(FacialRegionPropertiesStructTest, DefaultConstructor) {
+TEST_F(TissueRegionPropertiesStructTest, DefaultConstructor) {
     // The default constructor should initialize all fields to zero/empty.
-    facialRegionProperties rp;
+    tissueRegionProperties rp;
     EXPECT_TRUE(rp.name.empty());
     EXPECT_FLOAT_EQ(rp.stretchMin, 0.0f);
     EXPECT_FLOAT_EQ(rp.stretchMax, 0.0f);
@@ -585,9 +585,9 @@ TEST_F(FacialRegionPropertiesStructTest, DefaultConstructor) {
     EXPECT_TRUE(rp.subsetObjFile.empty());
 }
 
-TEST_F(FacialRegionPropertiesStructTest, ParameterizedConstructorMinimal) {
+TEST_F(TissueRegionPropertiesStructTest, ParameterizedConstructorMinimal) {
     // The 3-argument constructor should set name, stretchMin, stretchMax.
-    facialRegionProperties rp("test", 0.5f, 1.5f);
+    tissueRegionProperties rp("test", 0.5f, 1.5f);
     EXPECT_EQ(rp.name, "test");
     EXPECT_FLOAT_EQ(rp.stretchMin, 0.5f);
     EXPECT_FLOAT_EQ(rp.stretchMax, 1.5f);
@@ -596,9 +596,9 @@ TEST_F(FacialRegionPropertiesStructTest, ParameterizedConstructorMinimal) {
     EXPECT_TRUE(rp.subsetObjFile.empty());
 }
 
-TEST_F(FacialRegionPropertiesStructTest, ParameterizedConstructorFull) {
+TEST_F(TissueRegionPropertiesStructTest, ParameterizedConstructorFull) {
     // The full constructor should set all fields.
-    facialRegionProperties rp("nose", 0.85f, 1.0f, 600.0f, 1200.0f, "nose_region.obj");
+    tissueRegionProperties rp("nose", 0.85f, 1.0f, 600.0f, 1200.0f, "nose_region.obj");
     EXPECT_EQ(rp.name, "nose");
     EXPECT_FLOAT_EQ(rp.stretchMin, 0.85f);
     EXPECT_FLOAT_EQ(rp.stretchMax, 1.0f);
@@ -607,10 +607,10 @@ TEST_F(FacialRegionPropertiesStructTest, ParameterizedConstructorFull) {
     EXPECT_EQ(rp.subsetObjFile, "nose_region.obj");
 }
 
-TEST_F(FacialRegionPropertiesStructTest, CopySemantics) {
+TEST_F(TissueRegionPropertiesStructTest, CopySemantics) {
     // Struct copy should produce an independent copy of all fields.
-    facialRegionProperties original("cheek", 0.5f, 2.0f, 100.0f, 200.0f, "cheek.obj");
-    facialRegionProperties copy = original;
+    tissueRegionProperties original("cheek", 0.5f, 2.0f, 100.0f, 200.0f, "cheek.obj");
+    tissueRegionProperties copy = original;
 
     EXPECT_EQ(copy.name, original.name);
     EXPECT_FLOAT_EQ(copy.stretchMin, original.stretchMin);
