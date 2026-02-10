@@ -28,15 +28,39 @@ def write_obj(filepath, vertices, faces, texcoords=None, material=None,
               comment="Generated shoulder prototype"):
     """Write an OBJ file with the given vertices and faces.
 
+    SkinFlaps OBJ loader REQUIRES:
+      - vt (texture coordinates) for EVERY vertex, before any f lines
+      - Face format: f v/vt v/vt v/vt (position/texture pairs)
+      - usemtl <int> before faces (defaults to "1" if not specified)
+
+    If texcoords is None, auto-generates spherical UV mapping from vertex
+    positions so the file is always valid for the SkinFlaps loader.
+
     Args:
         filepath: Output file path.
         vertices: List of (x, y, z) tuples.
         faces: List of (i, j, k) tuples (1-indexed).
-        texcoords: Optional list of (u, v) tuples. If provided, faces
-                   reference them as v/vt.
-        material: Optional material ID string (e.g. "2").
+        texcoords: Optional list of (u, v) tuples. If None, auto-generated.
+        material: Material ID string (e.g. "2"). Defaults to "1".
         comment: Header comment.
     """
+    # Auto-generate UV coordinates if not provided (spherical projection)
+    if texcoords is None:
+        texcoords = []
+        for vx, vy, vz in vertices:
+            # Spherical UV: u from atan2, v from asin(normalized y)
+            r = math.sqrt(vx * vx + vy * vy + vz * vz)
+            if r < 1e-12:
+                texcoords.append((0.5, 0.5))
+            else:
+                u = 0.5 + math.atan2(vz, vx) / (2.0 * math.pi)
+                v = 0.5 + math.asin(max(-1.0, min(1.0, vy / r))) / math.pi
+                texcoords.append((u, v))
+
+    # Default material to "1" (boundary) if not specified
+    if material is None:
+        material = "1"
+
     with open(filepath, 'w') as f:
         f.write("# {}\n".format(comment))
         f.write("# Prototype for SkinFlaps shoulder simulation\n")
@@ -44,24 +68,20 @@ def write_obj(filepath, vertices, faces, texcoords=None, material=None,
         for vx, vy, vz in vertices:
             f.write("v {:.6f} {:.6f} {:.6f}\n".format(vx, vy, vz))
 
-        if texcoords:
-            for u, v in texcoords:
-                f.write("vt {:.6f} {:.6f}\n".format(u, v))
+        for u, v in texcoords:
+            f.write("vt {:.6f} {:.6f}\n".format(u, v))
 
-        if material is not None:
-            f.write("usemtl {}\n".format(material))
+        f.write("usemtl {}\n".format(material))
+        f.write("s 1\n")
 
+        # Always write f v/vt v/vt v/vt format (required by SkinFlaps loader)
         for face in faces:
-            if texcoords:
-                f.write("f {}/{} {}/{} {}/{}\n".format(
-                    face[0], face[0], face[1], face[1], face[2], face[2]))
-            else:
-                f.write("f {} {} {}\n".format(face[0], face[1], face[2]))
+            f.write("f {}/{} {}/{} {}/{}\n".format(
+                face[0], face[0], face[1], face[1], face[2], face[2]))
 
     name = os.path.basename(filepath)
-    print("  Written: {} ({} verts, {} faces{})".format(
-        name, len(vertices), len(faces),
-        ", {} texcoords".format(len(texcoords)) if texcoords else ""))
+    print("  Written: {} ({} verts, {} faces, {} texcoords, material {})".format(
+        name, len(vertices), len(faces), len(texcoords), material))
 
 
 # ---------------------------------------------------------------------------
@@ -645,7 +665,7 @@ def generate_humerus():
     )
 
     filepath = os.path.join(OUTPUT_DIR, "ShoulderBone_humerus.obj")
-    write_obj(filepath, verts, faces,
+    write_obj(filepath, verts, faces, material="9",
               comment="ShoulderBone_humerus - humeral head collision sphere")
 
 
@@ -700,7 +720,7 @@ def generate_glenoid():
                           ring_vert(r + 1, j1)))
 
     filepath = os.path.join(OUTPUT_DIR, "ShoulderBone_glenoid.obj")
-    write_obj(filepath, vertices, faces,
+    write_obj(filepath, vertices, faces, material="9",
               comment="ShoulderBone_glenoid - glenoid socket (concave dish)")
 
 
@@ -718,7 +738,7 @@ def generate_acromion():
     )
 
     filepath = os.path.join(OUTPUT_DIR, "ShoulderBone_acromion.obj")
-    write_obj(filepath, verts, faces,
+    write_obj(filepath, verts, faces, material="9",
               comment="ShoulderBone_acromion - acromion plate above humeral head")
 
 
@@ -739,7 +759,7 @@ def generate_deep_bed():
     )
 
     filepath = os.path.join(OUTPUT_DIR, "ShoulderDeepBed.obj")
-    write_obj(filepath, verts, faces, texcoords=tcs,
+    write_obj(filepath, verts, faces, texcoords=tcs, material="5",
               comment="ShoulderDeepBed - fascial plane (deep bed surface)")
 
 
@@ -762,7 +782,7 @@ def generate_deltoid():
     )
 
     filepath = os.path.join(OUTPUT_DIR, "ShoulderMuscle_deltoid.obj")
-    write_obj(filepath, verts, faces,
+    write_obj(filepath, verts, faces, material="6",
               comment="ShoulderMuscle_deltoid - deltoid volume (closed manifold)")
 
 
@@ -784,7 +804,7 @@ def generate_supraspinatus():
     )
 
     filepath = os.path.join(OUTPUT_DIR, "ShoulderTendon_supraspinatus.obj")
-    write_obj(filepath, verts, faces,
+    write_obj(filepath, verts, faces, material="7",
               comment="ShoulderTendon_supraspinatus - tendon tube (closed manifold)")
 
 
@@ -873,6 +893,31 @@ def validate_obj(filepath):
     if dup_idx_count > 0:
         errors.append(
             "  {} face(s) with duplicate vertex indices".format(dup_idx_count))
+
+    # Check winding order consistency (matches SkinFlaps findAdjacentTriangles)
+    # Adjacent triangles sharing an edge must have OPPOSITE winding for that edge.
+    # SkinFlaps checks: if both triangles traverse the shared edge in the same
+    # direction (both ascending or both descending vertex index), it throws
+    # "Triangle ordering error".
+    edge_directions = {}  # (min_idx, max_idx) -> list of booleans (reversed?)
+    winding_errors = 0
+    for face in faces:
+        for k in range(3):
+            v_a = face[k]
+            v_b = face[(k + 1) % 3]
+            edge_key = (min(v_a, v_b), max(v_a, v_b))
+            is_reversed = (v_b < v_a)  # edge traversed in descending order
+            if edge_key[0] != edge_key[1]:  # skip self-loops
+                if edge_key not in edge_directions:
+                    edge_directions[edge_key] = []
+                edge_directions[edge_key].append(is_reversed)
+    for edge_key, dirs in edge_directions.items():
+        if len(dirs) == 2 and dirs[0] == dirs[1]:
+            winding_errors += 1
+    if winding_errors > 0:
+        errors.append(
+            "  {} edge(s) with SAME winding direction (will cause "
+            "'Triangle ordering error' in SkinFlaps)".format(winding_errors))
 
     if errors:
         print("  ISSUES in {}:".format(name))
