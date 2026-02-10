@@ -232,3 +232,60 @@ SurgicalSimGui (Main UI Container - imgui-based)
 ### Video Tutorials
 - [Users Guide - Facial Flap Closure](https://youtu.be/xuKLgMS5gzk)
 - [Cleft Lip Tutorial](https://youtu.be/CzBiVJ5Q508)
+
+---
+
+## 10. Shoulder Surgery Extension
+
+### Overview
+The simulator has been generalized to support multiple anatomies beyond facial surgery.
+A prototype shoulder surgery module is included for pipeline validation.
+
+### Architecture Changes for Multi-Anatomy Support
+- `SurgicalSimGui` (renamed from `FacialFlapsGui`) - anatomy-agnostic GUI class
+- `tissueRegionProperties` (renamed from `facialRegionProperties`) - generic region properties
+- `materialLayerConfig` struct - configurable tissue layer IDs loaded from `.smd` files
+- `AnatomyType` enum (`FACIAL`, `SHOULDER`, `GENERIC`) - auto-detected from scene name
+- Configurable fragment shader selection per anatomy type
+
+### Shoulder Prototype Models (Model/)
+| File | Faces | Purpose |
+|---|---|---|
+| `ShoulderSkin.obj` | 768 | Half-ellipsoid skin dome with UV mapping |
+| `ShoulderDeepBed.obj` | 480 | Fascial separation plane |
+| `ShoulderMuscle_deltoid.obj` | 640 | Closed manifold deltoid volume (tetSubset) |
+| `ShoulderTendon_supraspinatus.obj` | 300 | Closed manifold supraspinatus tendon (tetSubset) |
+| `ShoulderBone_humerus.obj` | 288 | Humeral head collision sphere |
+| `ShoulderBone_glenoid.obj` | 180 | Glenoid socket dish |
+| `ShoulderBone_acromion.obj` | 96 | Acromion plate |
+| `ShoulderPrototype.smd` | -- | Scene file with shoulder physics parameters |
+| `shoulderFragmentShader.txt` | -- | Shader with tendon/capsule/bone materials |
+
+### Shoulder Tissue Regions
+| Region | stretchMin | stretchMax | Stiffness | Notes |
+|---|---|---|---|---|
+| skin_deltoid | 0.6 | 1.8 | Low | High extensibility |
+| deltoid_muscle | 0.5 | 2.5 | Medium | Very flexible |
+| supraspinatus_tendon | 0.85 | 1.15 | High | Stiff, limited stretch |
+| joint_capsule | 0.9 | 1.1 | Very High | Limited deformation |
+| bone | 0.99 | 1.01 | Extreme | Effectively rigid |
+
+### Shoulder-Specific Surgical Tools
+| Tool | State | Purpose |
+|---|---|---|
+| Suture Anchor | 8 | Bone-fixed anchor for rotator cuff repair sutures |
+| Arthroscope | 9 | Intra-articular camera view (stub) |
+| Grasper | 10 | Two-point tissue grasper (stub) |
+
+### Shader Material IDs (Shoulder)
+| ID | Tissue | Appearance |
+|---|---|---|
+| 11 | Tendon | Pearlescent white, fibrous longitudinal texture |
+| 12 | Joint capsule | Translucent pinkish-white, smooth |
+| 13 | Bone surface | Ivory/cream, subtle porous texture |
+
+### Future Work
+- Replace prototype models with CT/MRI-segmented anatomical meshes
+- Implement arthroscope camera viewport (secondary rendering pass)
+- Add anisotropic tissue physics for tendons (fiber-direction constraints)
+- Create tutorial history files for rotator cuff and Bankart repair
