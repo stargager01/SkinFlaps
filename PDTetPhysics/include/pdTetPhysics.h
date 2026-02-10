@@ -11,6 +11,12 @@
 #include "Utilities.h"
 
 
+/** @brief Projective dynamics physics solver wrapper for BCC tetrahedral simulation.
+ *
+ * Provides the high-level interface to the PDTetSolver, managing hooks, sutures,
+ * collision objects, fixed vertex constraints, and per-tet material properties.
+ * Used by bccTetScene to drive the deformable tissue physics each frame.
+ */
 class pdTetPhysics {
 	// a very unsafe wrapper class
 private:
@@ -28,20 +34,20 @@ private:
 	std::vector<int> fixedTetConstraints;
 
 public:
-	/* loaded with model file in history as static variables applied to all tet constraints. Later
-	 * could have different properties for different tissues (e.g. cartilage versus skin
-	 * versus breast) with different closed manifold surfaces around different types of tissue
-	 * in the model.  If done that way global collision weight would be handled separately.
-	 */
-
+	/// @brief Add a rigid collision level-set object from an OBJ file path.
 	inline void addCollisionObject(const std::string& collisionObjPath) {
 		m_solver.addLevelSet(collisionObjPath);
 	}
 
+	/// @brief Register tets that participate in soft (self) collision detection.
 	void addSoftCollisionTets(const std::vector<int> &tets) {
 		m_solver.addSelfCollisionElements(&tets[0], tets.size());
 	}
 
+	/** @brief Add a fixed collision set with a level-set surface and proxy tets/weights.
+	 *
+	 * Loads the level-set once on first call; subsequent calls only update proxy data.
+	 */
 	void addFixedCollisionSet(const std::string &levelSetFile, const std::vector<int> &tets, const std::vector<std::array<float, 3> > &weights) {
 		if (!m_levelsetInited)
 			addCollisionObject(levelSetFile);
@@ -49,6 +55,7 @@ public:
 			// called after every topological change as tets and weights will change.  Check to see if levelSetFile has already been loaded.  This only needs to be done on initial load and not repeated.
 	}
 
+	/// @brief Update the current frame's soft collision suture pairs between top and bottom surfaces.
 	void currentSoftCollisionPairs(const std::vector<int> &topTets, const std::vector<std::array<float, 3> > &topBarys,
 		const std::vector<int> &bottomTets, const std::vector<std::array<float, 3> > &bottomBarys, const std::vector<std::array<float, 3> > &collisionNormals) {
 		assert(topTets.size() == topBarys.size() && topTets.size() == bottomTets.size() && topTets.size() == bottomBarys.size() && topTets.size() == collisionNormals.size());
@@ -57,10 +64,22 @@ public:
 			m_solver.updateCollisionSutures(topTets.size(), topTets.data(), bottomTets.data(), topBarys[0].data(), bottomBarys[0].data(), collisionNormals[0].data());
 	}
 
+	/// @brief Remove all soft collision sutures for the current frame.
 	inline void clearSoftCollisions() {
 		m_solver.clearCollisionSutures();
 	}
 
+	/** @brief Set global tetrahedral material properties (can only be called once).
+	 *  @param lowTetWeight   Stiffness weight for low-resolution tets.
+	 *  @param highTetWeight  Stiffness weight for high-resolution tets.
+	 *  @param TJunctionWeight  Weight for T-junction internode constraints.
+	 *  @param strainMin  Global minimum strain limit (compression).
+	 *  @param strainMax  Global maximum strain limit (extension).
+	 *  @param collisionWeight  Weight for fixed collision constraints.
+	 *  @param selfCollisionWeight  Weight for self-collision constraints.
+	 *  @param fixedWeight  Weight for Dirichlet (fixed vertex) constraints.
+	 *  @param peripheralWeight  Weight for peripheral boundary constraints.
+	 */
 	inline void setTetProperties(const float lowTetWeight, const float highTetWeight, const float TJunctionWeight, const float strainMin, const float strainMax, const float collisionWeight, const float selfCollisionWeight, const float fixedWeight, const float peripheralWeight) {
 		// guard against reset tetProperties
 		if (m_tetPropsSet)
@@ -73,6 +92,9 @@ public:
 		m_solver.setParameters(highTetWeight / 2, lowTetWeight / highTetWeight, strainMin, strainMax, collisionWeight, selfCollisionWeight);
 	}
 
+	/** @brief Assign per-subset tet properties (stiffness and strain limits) to a group of tets.
+	 *  @param tets  Indices of tets belonging to this subset (e.g. cartilage, specific tissue region).
+	 */
 	inline void tetSubset(const float lowTetWeight, const float highTetWeight, const float strainMin, const float strainMax, const std::vector<int>& tets) {
 		m_solver.addSubset(highTetWeight / 2, lowTetWeight / highTetWeight, strainMin, strainMax, tets);
 
@@ -82,8 +104,14 @@ public:
 		std::cout << "calling tetSubset with set size : "<<tets.size() << std::endl;
 	}
 
+	/// @brief Return true if the solver has been fully initialized and is ready to solve.
 	inline bool solverInitialized() { return m_solverInited; }
 
+	/** @brief Create the BCC tet deformer from tet index data at a single resolution.
+	 *  @param tetIndices  Vector of tet node index quadruples.
+	 *  @param tetScale    Half-width of the smallest tet cell.
+	 *  @return Pointer to the solver's position array (3 floats per node).
+	 */
 	inline std::array<float, 3>* createBccTetStructure(const std::vector< std::array<int, 4> > &tetIndices, float tetScale) {
 		m_solver.initializeDeformer(reinterpret_cast<const int(*)[4]>(&tetIndices[0][0]), tetIndices.size(), tetScale * 2);
 		m_deformerInited = true;
@@ -92,6 +120,12 @@ public:
 		return reinterpret_cast<std::array<T, d>(*)>(m_solver.getPositionPtr());
 	}
 
+	/** @brief Create the BCC tet deformer with multi-resolution tet sizes.
+	 *  @param tetIndices       Vector of tet node index quadruples.
+	 *  @param tetSizeMultiples  Size multiplier per tet (1 = smallest, 2 = 2x, etc.).
+	 *  @param tetScale         Half-width of the smallest tet cell.
+	 *  @return Pointer to the solver's position array (3 floats per node).
+	 */
 	inline std::array<float, 3>* createBccTetStructure_multires(const std::vector< std::array<int, 4> >& tetIndices, const std::vector<uint8_t>& tetSizeMultiples, float tetScale) {
 		m_solver.initializeDeformer_multires(reinterpret_cast<const int(*)[4]>(&tetIndices[0][0]), reinterpret_cast<const uint8_t*>(&tetSizeMultiples[0]), tetIndices.size(), tetScale * 2);
 		m_deformerInited = true;
@@ -100,9 +134,11 @@ public:
 		return reinterpret_cast<std::array<T, d>(*)>(m_solver.getPositionPtr());
 	}
 
-	// Next routine for inputting nodes on the face separating a large tet from possible multiple smaller ones. The subnodes input are present on a smaller tet, but not on the larger one.
-	// These are constrained by internodeWeight to be barycentrically located on the larger face by faceNodes.  With multiple levels of physics resolution faceNodes and their
-	// corresponding barycentric multipliers can number more than three for a single subtet.
+	/** @brief Add T-junction internode constraints between multi-resolution tet faces.
+	 *  @param subNodes          Nodes on the smaller tet that lie on a larger tet's face.
+	 *  @param faceNodes         For each subNode, the larger-face nodes that constrain it.
+	 *  @param faceBarycentrics  Barycentric weights corresponding to each faceNode set.
+	 */
 	void addInterNodeConstraints(const std::vector<int>& subNodes, const std::vector<std::vector<int> >& faceNodes, const std::vector<std::vector<float> >& faceBarycentrics) {
 		int sns = subNodes.size();
 		assert(sns == faceNodes.size() && sns == faceBarycentrics.size());
@@ -119,12 +155,11 @@ public:
 		}
 	}
 
-	/* Doesn’t always follow createNewTetTopology() and may happen without changing
-	 * tets. For example periosteal undermining releases some of these removing some
-	 * Dirichlet constraints but all the tet constraints stay the same.	 */
-
-	 // Court's new fixed vertex constraint version to replace setFixedNodes(). Should have done it this way in the first place. Sorry Qisi.
-	// Also with a periosteal undermine there is no topo change, but previous fixed constraints are released so a pd reinit is required?
+	/** @brief Set Dirichlet (fixed) and peripheral boundary vertex constraints.
+	 *
+	 * Replaces any existing fixed/peripheral constraints. May be called after topology
+	 * changes or periosteal undermining without requiring a full tet rebuild.
+	 */
 	inline void setFixedVertices(const std::vector<int> &fixedTets, const std::vector<std::array<float, 3> > &fixedWeights, const std::vector<std::array<float, 3> > &fixedPositions,
 		const std::vector<int> &peripheralTets, const std::vector<std::array<float, 3> > &peripheralWeights, const std::vector<std::array<float, 3> > &peripheralPositions) {
 		if (!m_deformerInited)
@@ -152,7 +187,13 @@ public:
 		}
 	}
 
-	/* returns constraint index */
+	/** @brief Add a hook constraint at a barycentric location within a tet.
+	 *  @param tet               Tet index containing the hook point.
+	 *  @param barycentricWeight Barycentric coordinates within the tet.
+	 *  @param hookPosition      Target spatial position for the hook.
+	 *  @param strong            If true, apply greatly increased hook stiffness.
+	 *  @return Constraint handle for later moveHook() or deleteHook() calls.
+	 */
 	inline int addHook(const int tet, const std::array<float, 3> &barycentricWeight, const std::array<float, 3> &hookPosition, bool strong = false) {
 		if (!m_deformerInited)
 			throw std::logic_error("need to init tet topology before addHook");
@@ -165,27 +206,30 @@ public:
 		return number;
 	}
 
+	/// @brief Move an existing hook constraint to a new spatial position.
 	inline void moveHook(const int hookHandle, const std::array<float, 3> &newPosition) {
 		if (!m_deformerInited)
 			throw std::logic_error("need to init tet topology before moveHook");
 		m_solver.moveConstraint(hookHandle, reinterpret_cast<const T(&)[d]>(newPosition));
 	}
 
-	/* Could also just nullify it. */
+	/// @brief Delete a hook constraint by its handle.
 	inline void deleteHook(const int hookHandle) {
 		if (!m_deformerInited)
 			throw std::logic_error("need to init tet topology before deleteHook");
 		m_solver.deleteConstraint(hookHandle);
 	}
 
-	/*Sets static variables for these parameters. */
+	/// @brief Set the stiffness weights for hooks and sutures, and an optional stress limit.
 	inline void setHookSutureWeights(const float hookWeight, const float sutureWeight, const float stressLimit = FLT_MAX) {
 		m_hookWeight = hookWeight;
 		m_sutureWeight = sutureWeight;
 		m_stressLimit = stressLimit;
 	}
 
-	/* returns constraint index */
+	/** @brief Add a suture constraint connecting two barycentric points in two tets.
+	 *  @return Constraint handle for later deleteSuture() calls.
+	 */
 	inline int addSuture(const int(&tets)[2], const std::array<float, 3>(&barycentricWeights)[2]) {
 		// unlike hooks doesn't call initializePhysics() here due to suture group entry.
 		// Must call initializePhysics() in calling routine handling individual versus group entry.
@@ -195,14 +239,18 @@ public:
 		return m_solver.addSuture(tets, reinterpret_cast<const T(&)[2][d]>(barycentricWeights[0]), sqrt(m_sutureWeight));
 	}
 
-	/* Perhaps there should be a single delete(or nullify?)Constraint(int Handle); call for both hooks and sutures.*/
+	/// @brief Delete a suture constraint by its handle.
 	inline void deleteSuture(const int sutureHandle) {
 		if (!m_deformerInited)
 			throw std::logic_error("need to init tet topology before deleteSuture");
 		m_solver.deleteSuture(sutureHandle);
 	}
 
-	// After constraints have changed computes ATA and does its LDLT() if needed
+	/** @brief Initialize or re-initialize the physics solver after constraint changes.
+	 *
+	 * On first call, builds the system matrix (ATA) and performs LDLT factorization.
+	 * On subsequent calls, re-factorizes to incorporate added/removed constraints.
+	 */
 	inline void initializePhysics() {
 		if (m_solverInited) {
 			reInitializePhysics();
@@ -230,13 +278,14 @@ public:
 	}
 	public:
 
+	/// @brief Set collision proxy points (tet + barycentric weight) for level-set collision.
 	inline void inputCollisionProxies(const std::vector<int> &tets, const std::vector<std::array<float, 3> > &weights) {
 		if (!m_deformerInited)
 			throw std::logic_error("need to init tet topology before add proxies");
 		m_solver.addCollisionProxies(&tets[0], reinterpret_cast<const T(*)[d]>(&weights[0]), tets.size());
 	}
 
-	// do least squares solve and process collisions
+	/// @brief Run one iteration of the projective dynamics solver (least-squares solve + collisions).
 	inline void solve() {
 		if (!m_solverInited)
 			throw std::logic_error("need to init solver before solve");
@@ -250,8 +299,10 @@ public:
 		m_solver.releaseDeformer();
 	}
 
+	/// @brief Promote all temporary sutures to permanent constraints. Requires re-initialization.
 	inline void promoteAllSutures() { m_solver.premoteSutures(); m_solverInited = false;}
 
+	/// @brief Initialize the level-set collision object at the given grid resolution.
 	inline void initializeCollisionObject(const T levelSetDx) { if (!m_levelsetInited) { m_solver.initializeLevelSet(levelSetDx); m_levelsetInited = true; } }
 
 private:

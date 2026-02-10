@@ -28,24 +28,54 @@ class fence;
 class FacialFlapsGui;
 struct rayTriangleIntersect;
 
+/** @brief Full-thickness incision tool that cuts through the BCC tet lattice.
+ *
+ * Performs deep surgical cuts by computing intersections in material coordinates
+ * to avoid artifacts from transiently inverted tets in the physics simulation.
+ * Extends skinCutUndermineTets with deep-plane cutting and periosteal undermining.
+ */
 class deepCut : public skinCutUndermineTets
 {
 public:
+	/// @brief Enable or disable verbose diagnostic logging for cut operations.
 	void setDiagnosticLog(bool enable) { _diagnosticLog = enable; }
 
-	// Set inverse of deep cut interior point spacing. Default is 15.0f.
-	// This value is model-dependent and should be configured per scene file.
+	/** @brief Set the inverse of deep cut interior point spacing.
+	 *  @param spacing  Inverse spacing value; higher means denser interior points. Default is 15.0f.
+	 *
+	 *  This value is model-dependent and should be configured per scene file.
+	 */
 	void setCutSpacingInv(float spacing) { _cutSpacingInv = spacing; }
+	/// @brief Return the current inverse cut spacing value.
 	float getCutSpacingInv() const { return _cutSpacingInv; }
 
+	/// @brief Validate and correct a fence path before using it as a cut guide.
 	bool inputCorrectFence(fence* fp, FacialFlapsGui* ffg);
+	/** @brief Add a deep incision post at a surface triangle location.
+	 *  @param triangle    Triangle index on the skin surface.
+	 *  @param uv          Parametric coordinates on the triangle.
+	 *  @param rayDirection  View ray direction for determining cut depth.
+	 *  @param closedEnd   If true, this post closes the incision end.
+	 *  @return The index of the newly added post, or -1 on failure.
+	 */
 	int addDeepPost(const int triangle, const float(&uv)[2], const Vec3d& rayDirection, bool closedEnd);
+	/// @brief Remove the last added deep post (undo support).
 	inline void popLastDeepPost() { if(!_deepPosts.empty()) _deepPosts.pop_back(); }
+	/// @brief Return the number of deep posts currently placed.
 	inline int numberOfDeepPosts() { return (int)_deepPosts.size(); }
+	/// @brief Prevent the cut path from crossing over a previous incision.
 	int preventPreviousCrossover(const int postNum);  // COURT make private with new interface
+	/// @brief Retrieve the spatial positions and normals of all deep posts.
 	void getDeepPosts(std::vector<Vec3f>& xyz, std::vector<Vec3f>& nrm);
+	/** @brief Execute the deep cut using the currently placed deep posts.
+	 *  @return True if the cut was completed successfully.
+	 *
+	 *  All post data must be loaded in _deepPosts before calling. Physics must be paused.
+	 */
 	bool cutDeep();  // data already loaded in _deepPosts in this updated version
+	/// @brief Clear all deep posts and reset the cutter state.
 	void clearDeepCutter(){_deepPosts.clear();}
+	/// @brief Add a periosteal undermine triangle following a deep cut through periosteum.
 	int addPeriostealUndermineTriangle(const int topTriangle, const Vec3f &linePickDirection, const bool incisionConnect);  // can only follow a deepCut through periosteum.
 	deepCut() { _deepXyz.clear(); _deepPosts.clear(); }
 	deepCut(const deepCut&) = delete;

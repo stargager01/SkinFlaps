@@ -1,0 +1,33 @@
+# Doxyfile for SkinFlaps project
+# Generated for API documentation
+
+PROJECT_NAME           = SkinFlaps
+PROJECT_NUMBER         = 1.2.1
+PROJECT_BRIEF          = "Facial skin flap surgical simulator with projective dynamics physics"
+
+# Input sources
+INPUT                  = ../SkinFlaps/src ../PDTetPhysics/include ../gl3wGraphics
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp *.cpp
+
+# Extraction settings
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+
+# Output settings
+OUTPUT_DIRECTORY       = api_docs
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+# Source browsing
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+
+# Graph settings
+HAVE_DOT               = NO
+
+# Quiet mode
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO

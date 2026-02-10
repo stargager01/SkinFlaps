@@ -15,20 +15,33 @@ class materialTriangles;
 class vnBccTetrahedra;
 class pdTetPhysics;
 
+/** @brief Collision detection and response between the deformable skin flap and fixed anatomy.
+ *
+ * Manages both soft (self) collisions between flap surfaces and fixed collisions
+ * against rigid structures (e.g. bone). Uses ray-casting from bed surface vertices
+ * to detect interpenetration with the flap bottom surface each physics iteration.
+ */
 class tetCollisions
 {
 public:
-	void initSoftCollisions(materialTriangles *mt, vnBccTetrahedra *vnt);  // call after every topo change
-	void findSoftCollisionPairs();  // call every physics iteration
-	void addFixedCollisionSet(const std::string& levelSetFile, std::vector<int>& vertexIndices);  // call once at load
-	void updateFixedCollisions(materialTriangles *mt, vnBccTetrahedra *vnt);  // must be done after every topo change
+	/// @brief Initialize soft collision ray data. Must be called after every topology change.
+	void initSoftCollisions(materialTriangles *mt, vnBccTetrahedra *vnt);
+	/// @brief Detect soft collision pairs for the current physics frame.
+	void findSoftCollisionPairs();
+	/// @brief Register a fixed (rigid) collision level-set surface loaded at startup.
+	void addFixedCollisionSet(const std::string& levelSetFile, std::vector<int>& vertexIndices);
+	/// @brief Rebuild fixed collision data after a topology change.
+	void updateFixedCollisions(materialTriangles *mt, vnBccTetrahedra *vnt);
+	/// @brief Return true if no collision sets or rays are configured.
 	bool empty() { return _fixedCollisionSets.empty() && _bedRays.empty(); }
+	/// @brief Assign the physics solver used to apply collision constraint forces.
 	inline void setPdTetPhysics(pdTetPhysics *ptp) { _ptp = ptp; }
-	// Collision density multiplier for convex surface areas. Default 1.0 uses only per-vertex rays (original behavior).
-	// Values > 1.0 add edge midpoint rays on bed surface triangles to increase collision sample density,
-	// improving collision response where tight flap closures are done over very convex surfaces.
-	// See README Known Issues #2.
+	/** @brief Set the collision sampling density multiplier.
+	 *  @param multiplier  1.0 = vertex-only rays (default). Values > 1.0 add edge midpoint
+	 *                     rays for denser sampling on convex surfaces.
+	 */
 	void setCollisionDensity(float multiplier);
+	/// @brief Return the current collision density multiplier.
 	inline float getCollisionDensity() const { return _collisionDensityMultiplier; }
 	tetCollisions() : _itCount(0), _initialized(false), _collisionDensityMultiplier(1.0f), _minTime((double)FLT_MAX), _maxTime(0.0){
 		_fixedCollisionSets.clear(); _flapBotTris.clear();
