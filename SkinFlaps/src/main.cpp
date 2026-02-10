@@ -121,29 +121,34 @@ int main(int, char**)
 		}
 		catch (const std::runtime_error& re) {
 			ffg.nextCounter = 0;
+			ImGui::EndFrame();  // ensure ImGui frame is closed if exception skipped Render()
 			std::string err = "Program runtime error occurred.\n";
 			err += re.what();
 			ffg.handleThrow(err.c_str());
 		}
 		catch (const std::logic_error& le){
 			ffg.nextCounter = 0;
+			ImGui::EndFrame();
 			std::string err = "Program logic error occurred.\n";
 			err += le.what();
 			ffg.handleThrow(err.c_str());
 		}
 		catch (const std::bad_alloc& ba) {
 			ffg.nextCounter = 0;
+			ImGui::EndFrame();
 			std::string err = "Not enough memory in this machine to handle this program.\n";
 			err += ba.what();
 			ffg.handleThrow(err.c_str());
 		}
 		catch (const std::exception& e) {
 			ffg.nextCounter = 0;
+			ImGui::EndFrame();
 			std::string err = std::string("Program error: ") + e.what();
 			ffg.handleThrow(err.c_str());
 		}
 		catch (...) {
 			ffg.nextCounter = 0;
+			ImGui::EndFrame();
 			// catch any other errors
 			ffg.handleThrow("Unspecified program error occurred.\n");
 		}
