@@ -50,10 +50,21 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	istr.close();
 	json::Value my_data = json::Deserialize(jsonStr);  // will trim leading and trailing white space from {} pair
 	if (my_data.GetType() != json::ObjectVal) {
-		_surgAct->sendUserMessage("Module file not in correct JSON format-", "Error Message");
+		std::string errMsg = "Scene file not in correct JSON format (got type ";
+		errMsg += std::to_string(my_data.GetType()) + " instead of Object): ";
+		errMsg += sceneFileName;
+		_surgAct->sendUserMessage(errMsg.c_str(), "Error Message");
 		return false;
 	}
-	json::Object scnObj = my_data.ToObject();
+	json::Object scnObj;
+	try {
+		scnObj = my_data.ToObject();
+	}
+	catch (const std::runtime_error& e) {
+		std::string errMsg = std::string("JSON type error parsing scene file: ") + e.what();
+		_surgAct->sendUserMessage(errMsg.c_str(), "Error Message");
+		return false;
+	}
 	json::Object::ValueMap::iterator oit, suboit, suboit2;
 	_dataDirectory = std::string(dataDirectory);
 	_referencedObjFiles.clear();
@@ -85,6 +96,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		return false;
 	}
 	else {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("textureFiles section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object txObj = oit->second.ToObject();
 		for (suboit = txObj.begin(); suboit != txObj.end(); ++suboit) {
 			path = dataDirectory + suboit->first;
@@ -100,6 +115,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		}
 	}
 	if ((oit = scnObj.find("staticObjects")) != scnObj.end()) {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("staticObjects section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object statObj = oit->second.ToObject();
 		for (suboit = statObj.begin(); suboit != statObj.end(); ++suboit) {
 			path = dataDirectory + suboit->first;
@@ -132,6 +151,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		return false;
 	}
 	else {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("dynamicObjects section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object dynObj = oit->second.ToObject();
 		std::vector<int> txIds;
 		for (suboit = dynObj.begin(); suboit != dynObj.end(); ++suboit) {
@@ -194,6 +217,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		throw(std::logic_error("Model .smd file sent to simulator uses an old fixedGeometry specifier that is no longer supported.\n"));
 	}
 	if ((oit = scnObj.find("fixedCollisionSets")) != scnObj.end()) {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("fixedCollisionSets section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object hullObj = oit->second.ToObject();
 		std::string lsPath;
 		for (suboit = hullObj.begin(); suboit != hullObj.end(); ++suboit) {
@@ -209,6 +236,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	int nTetSizeLevels = 4, maxDimMegatetSubdivs = 31;  // Multires settings initial tet count 11,587 tets while old single res was0.5 million tets for cleft model.  Now loaded in properties below.
 	if ((oit = scnObj.find("tetrahedralProperties")) != scnObj.end()) {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("tetrahedralProperties section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object hullObj = oit->second.ToObject();
 		float lowTetWeight, highTetWeight, TJunctionWeight, strainMin, strainMax, collisionWeight, fixedWeight, periferalWeight, hookWeight, sutureWeight, autoSutureSpacing, selfCollisionWeight;
 		for (suboit = hullObj.begin(); suboit != hullObj.end(); ++suboit) {
@@ -261,6 +292,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	};
 	std::list<tetSubset> tetSubsets;
 	if ((oit = scnObj.find("tetrahedralSubsets")) != scnObj.end()) {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("tetrahedralSubsets section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object tetSubObj = oit->second.ToObject();
 		tetSubset ts;
 		for (suboit = tetSubObj.begin(); suboit != tetSubObj.end(); ++suboit) {
@@ -293,6 +328,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	//   }
 	// If no tissueRegions section is present, default region properties are loaded automatically.
 	if ((oit = scnObj.find("tissueRegions")) != scnObj.end()) {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("tissueRegions section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object regObj = oit->second.ToObject();
 		for (suboit = regObj.begin(); suboit != regObj.end(); ++suboit) {
 			tissueRegionProperties rp;
@@ -326,6 +365,10 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	// If absent, the materialLayerConfig defaults (matching the hardcoded facial tissue IDs)
 	// are used. This allows non-facial anatomies to define their own layer semantics.
 	if ((oit = scnObj.find("materialLayers")) != scnObj.end()) {
+		if (oit->second.GetType() != json::ObjectVal) {
+			_surgAct->sendUserMessage("materialLayers section must be a JSON object in .smd file-", "Error Message");
+			return false;
+		}
 		json::Object mlObj = oit->second.ToObject();
 		if (mlObj.HasKey("boundary")) _materialLayers.boundary = mlObj["boundary"].ToInt();
 		if (mlObj.HasKey("skinSurface")) _materialLayers.skinSurface = mlObj["skinSurface"].ToInt();

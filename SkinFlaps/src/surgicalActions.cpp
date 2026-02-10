@@ -1397,8 +1397,10 @@ bool surgicalActions::loadScene(const char *modelDirectory, const char *sceneFil
 	bool ret = _bts.loadScene(modelDirectory, sceneFilename);  // computes bounding spheres
 	_sceneDir.assign(modelDirectory);
 	_originalTriangleNumber = _sg.getMaterialTriangles()->numberOfTriangles();
-	if(ret && _historyArray.size() < 1) {
-		std::string dstr(modelDirectory),fstr(sceneFilename);
+	if (ret) {
+		// Always reset history when loading a new scene to prevent stale
+		// history entries from causing json mValueType==ObjectVal errors.
+		std::string dstr(modelDirectory), fstr(sceneFilename);
 		_historyArray.Clear();
 		std::size_t n;
 		while ((n = dstr.find("\\")) < dstr.npos)
@@ -1911,6 +1913,13 @@ void surgicalActions::nextHistoryAction()
 {
 	if (_historyIt == _historyArray.end()) {
 		sendUserMessage("There are no more actions found in this history file-", "SURGICAL HISTORY INFORMATION", false);
+		return;
+	}
+	// Each history entry must be a JSON Object. Guard against corrupt .hst data
+	// or stale iterators that could cause json mValueType==ObjectVal required.
+	if (_historyIt->GetType() != json::ObjectVal) {
+		sendUserMessage("Corrupt history entry (expected JSON Object). History replay stopped-", "HISTORY FILE ERROR", false);
+		_historyIt = _historyArray.end();
 		return;
 	}
 	_bts.setPhysicsPause(true);  // don't spawn another physics update till complete
