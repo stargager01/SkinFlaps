@@ -8,6 +8,7 @@
 #define __SUTURES_H__
 
 #include <map>
+#include <vector>
 #include <memory>
 #include "Vec3f.h"
 #include "pdTetPhysics.h"
@@ -44,6 +45,18 @@ protected:
 	int _constraintId;  // index of the suture constraint
 	Vec3f _baryWeights[2];
 	friend class sutures;
+};
+
+/// @brief A bone-fixed suture anchor point for rotator cuff repair.
+/// Unlike regular sutures which connect two soft tissue points,
+/// an anchor has one fixed point on a bone surface and one or more
+/// suture threads connecting to soft tissue.
+struct sutureAnchor {
+	float bonePosition[3];      ///< Fixed position on bone collision surface
+	float boneNormal[3];        ///< Surface normal at anchor point
+	int collisionObjectIdx;     ///< Index of the bone collision object
+	std::vector<int> sutureIds; ///< IDs of sutures originating from this anchor
+	bool isPlaced = false;      ///< Whether the anchor has been placed
 };
 
 class sutures
@@ -94,6 +107,12 @@ public:
 	}
 	inline void setGroupPhysicsInit(bool groupInit) { _groupPhysicsInit = groupInit; }
 
+	/// @brief Add a bone-fixed suture anchor at the given position and normal.
+	/// @return Index of the newly created anchor in _anchors.
+	int addAnchor(const float pos[3], const float normal[3], int collisionObjIdx);
+	/// @brief Return a read-only reference to all placed suture anchors.
+	const std::vector<sutureAnchor>& getAnchors() const { return _anchors; }
+
 	sutures();
 	~sutures();
 
@@ -112,6 +131,7 @@ private:
 	static float _sutureSize;
 	static GLfloat _selectedColor[4], _unselectedColor[4], _userColor[4];
 	bool _groupPhysicsInit;
+	std::vector<sutureAnchor> _anchors;  ///< Bone-fixed suture anchors for shoulder repair
 	int addSuture(materialTriangles *tri, int triangle0, int edge0, float param0);
 };
 

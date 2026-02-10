@@ -79,6 +79,10 @@ struct materialLayerConfig {
 	int arthroscopicPortal = -1;   ///< Arthroscopic entry portal
 };
 
+/// @brief Identifies the anatomy type of the loaded scene.
+/// Used to select appropriate shaders, default material layers, and region properties.
+enum class AnatomyType { FACIAL, SHOULDER, GENERIC };
+
 /** @brief BCC tetrahedral scene manager for projective dynamics-based surgical simulation.
  *
  * Provides the main interface between the surgical simulator and the physics engine.
@@ -173,6 +177,13 @@ public:
 	/// the "materialLayers" section in the .smd scene file.
 	const materialLayerConfig& getMaterialLayers() const { return _materialLayers; }
 
+	/// @brief Return the detected anatomy type for this scene.
+	AnatomyType getAnatomyType() const { return _anatomyType; }
+
+	/// @brief Validates that all referenced model files exist and the scene is consistent.
+	/// @return true if the scene is valid, false if files are missing or configuration is invalid.
+	bool validateScene() const;
+
 	bccTetScene();
 	~bccTetScene();
 
@@ -187,6 +198,10 @@ private:
 	vnBccTetCutter_tbb _tc;  // multithreaded version using Intel threaded building blocks.  Much faster.  Bug #2 fix: post-parallel canonicalization sorts nodes/tets by spatial coordinates for deterministic indices across runs.
 	pdTetPhysics _ptp;
 	bool _forcesApplied, _tetsModified, _physicsPaused;
+	AnatomyType _anatomyType = AnatomyType::FACIAL;
+	std::string _dataDirectory;  ///< Stored for post-load validation.
+	std::vector<std::string> _referencedObjFiles;     ///< OBJ files referenced by the scene.
+	std::vector<std::string> _referencedTextureFiles;  ///< Texture files referenced by the scene.
 	float _lowTetWeight;
 
 	// --- Region-specific stretch properties ---

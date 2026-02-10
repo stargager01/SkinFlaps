@@ -666,6 +666,12 @@ void SurgicalSimGui::InstanceCleftGui()
 			if (ImGui::MenuItem("Excise", NULL, csgToolstate == 5, true)) { csgToolstate = 5; igSurgAct.setToolState(5); }
 			if (ImGui::MenuItem("Deep cut", NULL, csgToolstate == 6, true)) { csgToolstate = 6; igSurgAct.setToolState(6); }
 			if (ImGui::MenuItem("Periosteal", NULL, csgToolstate == 7, true)) { csgToolstate = 7; igSurgAct.setToolState(7); }
+			ImGui::Separator();
+			// Shoulder surgery tools (TODO: filter visibility by anatomy type when supported)
+			if (ImGui::MenuItem("Anchor", NULL, csgToolstate == TOOL_SUTURE_ANCHOR, true)) { csgToolstate = TOOL_SUTURE_ANCHOR; igSurgAct.setToolState(TOOL_SUTURE_ANCHOR); }
+			if (ImGui::MenuItem("Scope", NULL, csgToolstate == TOOL_ARTHROSCOPE, true)) { csgToolstate = TOOL_ARTHROSCOPE; igSurgAct.setToolState(TOOL_ARTHROSCOPE); }
+			if (ImGui::MenuItem("Grasp", NULL, csgToolstate == TOOL_GRASPER, true)) { csgToolstate = TOOL_GRASPER; igSurgAct.setToolState(TOOL_GRASPER); }
+			ImGui::Separator();
 			if (ImGui::MenuItem("Promote sutures")) { igSurgAct.promoteFakeSutures();  csgToolstate = 0; igSurgAct.setToolState(0); }
 			if (ImGui::MenuItem("Pause physics")) { igSurgAct.pausePhysics();  csgToolstate = 0; igSurgAct.setToolState(0); }
 			ImGui::Separator();
@@ -742,6 +748,20 @@ void SurgicalSimGui::InstanceCleftGui()
 		if(ImGui::RadioButton("Periosteal", csgToolstate == 7)){
 			igSurgAct.setToolState(7);
 			csgToolstate = 7;
+		}
+		ImGui::Separator();
+		// Shoulder surgery tools (TODO: filter visibility by anatomy type when supported)
+		if (ImGui::RadioButton("Anchor", csgToolstate == TOOL_SUTURE_ANCHOR)) {
+			igSurgAct.setToolState(TOOL_SUTURE_ANCHOR);
+			csgToolstate = TOOL_SUTURE_ANCHOR;
+		}
+		if (ImGui::RadioButton("Scope", csgToolstate == TOOL_ARTHROSCOPE)) {
+			igSurgAct.setToolState(TOOL_ARTHROSCOPE);
+			csgToolstate = TOOL_ARTHROSCOPE;
+		}
+		if (ImGui::RadioButton("Grasp", csgToolstate == TOOL_GRASPER)) {
+			igSurgAct.setToolState(TOOL_GRASPER);
+			csgToolstate = TOOL_GRASPER;
 		}
 
 		ImGui::Separator();

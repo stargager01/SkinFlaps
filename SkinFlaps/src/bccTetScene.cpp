@@ -55,6 +55,28 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	json::Object scnObj = my_data.ToObject();
 	json::Object::ValueMap::iterator oit, suboit, suboit2;
+	_dataDirectory = std::string(dataDirectory);
+	_referencedObjFiles.clear();
+	_referencedTextureFiles.clear();
+	// Detect anatomy type from optional "sceneName" field.
+	// If "sceneName" contains "Shoulder" or "shoulder", set SHOULDER type.
+	// Otherwise default to FACIAL for backward compatibility.
+	_anatomyType = AnatomyType::FACIAL;
+	if ((oit = scnObj.find("sceneName")) != scnObj.end()) {
+		std::string sceneName = oit->second.ToString();
+		if (sceneName.find("Shoulder") != std::string::npos ||
+		    sceneName.find("shoulder") != std::string::npos) {
+			_anatomyType = AnatomyType::SHOULDER;
+		}
+		else if (sceneName.find("Facial") == std::string::npos &&
+		         sceneName.find("facial") == std::string::npos &&
+		         sceneName.find("Cleft") == std::string::npos &&
+		         sceneName.find("cleft") == std::string::npos &&
+		         sceneName.find("Face") == std::string::npos &&
+		         sceneName.find("face") == std::string::npos) {
+			_anatomyType = AnatomyType::GENERIC;
+		}
+	}
 	// get texture files first
 	std::map<int, GLuint> txMap;
 	std::string nrm, tex;
@@ -66,6 +88,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		json::Object txObj = oit->second.ToObject();
 		for (suboit = txObj.begin(); suboit != txObj.end(); ++suboit) {
 			path = dataDirectory + suboit->first;
+			_referencedTextureFiles.push_back(suboit->first);
 			GLuint txNow = _gl3w->getTextures()->loadTexture(suboit->second.ToInt(), path.c_str());
 			if (txNow > 0xfffffffe) {
 				path = "Unable to load bitmap .bmp input file: " + path;
@@ -80,6 +103,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		json::Object statObj = oit->second.ToObject();
 		for (suboit = statObj.begin(); suboit != statObj.end(); ++suboit) {
 			path = dataDirectory + suboit->first;
+			_referencedObjFiles.push_back(suboit->first);
 			std::map<int, GLuint>::iterator tit;
 			std::vector<int> txIds;
 			json::Object tmapObj = suboit->second.ToObject();
@@ -112,6 +136,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		std::vector<int> txIds;
 		for (suboit = dynObj.begin(); suboit != dynObj.end(); ++suboit) {
 			path = dataDirectory + suboit->first;
+			_referencedObjFiles.push_back(suboit->first);
 			std::map<int, GLuint>::iterator tit;
 			json::Object tmapObj = suboit->second.ToObject();
 			for (suboit2 = tmapObj.begin(); suboit2 != tmapObj.end(); ++suboit2) {
@@ -137,8 +162,18 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			_surgAct->getSurgGraphics()->setGl3wGraphics(_gl3w);
 			std::string vtxShd(dataDirectory), frgShd(dataDirectory);
 			vtxShd.append("mtVertexShader.txt");
-			frgShd.append("mtFragmentShader.txt");
-			_surgAct->getSurgGraphics()->setTextureFilesCreateProgram(txIds, vtxShd.c_str(), frgShd.c_str());  // openGL buffers ceated here
+			// Select fragment shader: use "fragmentShader" from the .smd if present,
+			// otherwise fall back based on anatomy type for backward compatibility.
+			if (scnObj.HasKey("fragmentShader")) {
+				frgShd.append(scnObj["fragmentShader"].ToString());
+			}
+			else if (_anatomyType == AnatomyType::SHOULDER) {
+				frgShd.append("shoulderFragmentShader.txt");
+			}
+			else {
+				frgShd.append("mtFragmentShader.txt");
+			}
+			_surgAct->getSurgGraphics()->setTextureFilesCreateProgram(txIds, vtxShd.c_str(), frgShd.c_str());  // openGL buffers created here
 			_surgAct->getSurgGraphics()->setNewTopology();
 			_surgAct->getSurgGraphics()->updatePositionsNormalsTangents();
 			_surgAct->getSurgGraphics()->computeLocalBounds();
@@ -518,13 +553,13 @@ void bccTetScene::updateSurfaceDraw()
 		fixPoints.insert(std::make_pair(_vnTets.getVertexTetrahedron(vId), ap));
 	};
 	for (int n = _mt->numberOfTriangles(), i = 0; i < n; ++i) {
-		if (_mt->triangleMaterial(i) == 7) {  // periosteal triangle
+		if (_mt->triangleMaterial(i) == _materialLayers.periosteum) {  // periosteal triangle
 			for (int k = 0; k < 3; ++k) {
 				int vIdx = _mt->triangleVertices(i)[k];
 				enterFixPoint(vIdx, false);
 			}
 		}
-		if (_mt->triangleMaterial(i) == 1) {  // periosteal triangle
+		if (_mt->triangleMaterial(i) == _materialLayers.boundary) {  // boundary/peripheral triangle
 			for (int k = 0; k < 3; ++k) {
 				int vIdx = _mt->triangleVertices(i)[k];
 				enterFixPoint(vIdx, true);
@@ -771,6 +806,84 @@ void bccTetScene::applyRegionSubsets(const std::string& dataDirectory) {
 			std::cout << msg << "\n";
 		}
 	}
+}
+
+bool bccTetScene::validateScene() const {
+	bool valid = true;
+	// Check that all referenced OBJ files exist in the model directory.
+	for (const auto& objFile : _referencedObjFiles) {
+		std::string fullPath = _dataDirectory + objFile;
+		std::ifstream ifs(fullPath.c_str());
+		if (!ifs.is_open()) {
+			std::cout << "Scene validation error: OBJ file not found: " << fullPath << "\n";
+			valid = false;
+		}
+	}
+	// Check that all referenced texture files exist.
+	for (const auto& texFile : _referencedTextureFiles) {
+		std::string fullPath = _dataDirectory + texFile;
+		std::ifstream ifs(fullPath.c_str());
+		if (!ifs.is_open()) {
+			std::cout << "Scene validation error: texture file not found: " << fullPath << "\n";
+			valid = false;
+		}
+	}
+	// Check that region subset OBJ files exist (if specified).
+	for (const auto& rp : _regionProperties) {
+		if (!rp.subsetObjFile.empty()) {
+			std::ifstream ifs(rp.subsetObjFile.c_str());
+			if (!ifs.is_open()) {
+				std::cout << "Scene validation error: region subset OBJ not found: "
+					<< rp.subsetObjFile << " (region: " << rp.name << ")\n";
+				valid = false;
+			}
+		}
+	}
+	// Validate material layer configuration consistency.
+	// Core layers (boundary, skinSurface, incisionEdge, subcutaneous, deepBed, muscle,
+	// periosteum, periosteumUndermined) must all have distinct positive IDs.
+	{
+		std::vector<int> coreIds = {
+			_materialLayers.boundary, _materialLayers.skinSurface,
+			_materialLayers.incisionEdge, _materialLayers.subcutaneous,
+			_materialLayers.deepBed, _materialLayers.muscle,
+			_materialLayers.periosteum, _materialLayers.periosteumUndermined
+		};
+		for (size_t i = 0; i < coreIds.size(); ++i) {
+			if (coreIds[i] <= 0) {
+				std::cout << "Scene validation error: core material layer ID at index "
+					<< i << " has invalid value " << coreIds[i] << "\n";
+				valid = false;
+			}
+			for (size_t j = i + 1; j < coreIds.size(); ++j) {
+				if (coreIds[i] == coreIds[j]) {
+					std::cout << "Scene validation error: duplicate material layer IDs "
+						<< coreIds[i] << " at indices " << i << " and " << j << "\n";
+					valid = false;
+				}
+			}
+		}
+	}
+	// Validate physics parameter ranges.
+	if (_globalStretchMin <= 0.0f || _globalStretchMin >= _globalStretchMax) {
+		std::cout << "Scene validation error: invalid global stretch range ["
+			<< _globalStretchMin << ", " << _globalStretchMax << "]\n";
+		valid = false;
+	}
+	if (_globalLowTetWeight <= 0.0f || _globalHighTetWeight <= 0.0f) {
+		std::cout << "Scene validation error: tet weights must be positive (low="
+			<< _globalLowTetWeight << ", high=" << _globalHighTetWeight << ")\n";
+		valid = false;
+	}
+	// Validate region stretch limits are within reasonable ranges.
+	for (const auto& rp : _regionProperties) {
+		if (rp.stretchMin <= 0.0f || rp.stretchMin >= rp.stretchMax) {
+			std::cout << "Scene validation error: invalid stretch range for region '"
+				<< rp.name << "': [" << rp.stretchMin << ", " << rp.stretchMax << "]\n";
+			valid = false;
+		}
+	}
+	return valid;
 }
 
 bccTetScene::~bccTetScene()

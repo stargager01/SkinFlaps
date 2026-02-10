@@ -21,6 +21,11 @@
 class SurgicalSimGui;
 class gl3wGraphics;
 
+/// Shoulder surgery tool state extensions (beyond existing 0-7 facial tools).
+static const int TOOL_SUTURE_ANCHOR = 8;   ///< Place suture anchor into bone
+static const int TOOL_ARTHROSCOPE = 9;     ///< Arthroscopic camera view
+static const int TOOL_GRASPER = 10;        ///< Two-point tissue grasper
+
 /** @brief Central controller for all surgical tool interactions in the simulator.
  *
  * Handles mouse and keyboard input for surgical tools (hooks, sutures, incisions,
@@ -116,6 +121,8 @@ public:
 private:
     struct float3{	float v[3]; };
 	int _toolState;
+	bool _sutureAnchorMode = false;  ///< True when placing suture anchors
+	int _arthroscopePortalIdx = -1;  ///< Index of active arthroscope portal
 	gl3wGraphics *_gl3w;
 	SurgicalSimGui *_ffg;
 	std::vector<int> _pXToPbTetVertices;

@@ -541,3 +541,16 @@ sutures::sutures() : _groupPhysicsInit(false)
 sutures::~sutures()
 {
 }
+
+int sutures::addAnchor(const float pos[3], const float normal[3], int collisionObjIdx)
+{
+	sutureAnchor anchor;
+	for (int i = 0; i < 3; ++i) {
+		anchor.bonePosition[i] = pos[i];
+		anchor.boneNormal[i] = normal[i];
+	}
+	anchor.collisionObjectIdx = collisionObjIdx;
+	anchor.isPlaced = true;
+	_anchors.push_back(anchor);
+	return (int)_anchors.size() - 1;
+}

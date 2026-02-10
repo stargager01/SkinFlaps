@@ -1,4 +1,6 @@
 {
+    "sceneName" : "ShoulderPrototype",
+    "fragmentShader" : "shoulderFragmentShader.txt",
     "dynamicObjects" : {
         "ShoulderSkin.obj" : {
             "textureMaps": [

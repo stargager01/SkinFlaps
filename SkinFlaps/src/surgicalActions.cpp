@@ -2645,6 +2645,10 @@ void surgicalActions::nextHistoryAction()
 		++_historyIt;
 		return;  // don't setToolState(0) as will unpause physics
 	}
+	// Shoulder surgery history action types (stubs for Phase 4 integration):
+	// "anchorPlace"         - placing a suture anchor into bone
+	// "anchorSuture"        - connecting a suture from an anchor to soft tissue
+	// "arthroscopePosition" - positioning the arthroscope camera at a portal
 	else
 		++_historyIt;
 	_ffg->setToolState(0);
