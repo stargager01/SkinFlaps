@@ -1,0 +1,108 @@
+{
+    "dynamicObjects" : {
+        "ShoulderSkin.obj" : {
+            "textureMaps": [
+                1,
+                2,
+                1,
+                2
+            ]
+        }
+    },
+    "staticObjects" : {
+        "ShoulderBone_humerus.obj" : {
+            "textureMap" : 1,
+            "normalMap" : 2
+        },
+        "ShoulderBone_glenoid.obj" : {
+            "textureMap" : 1,
+            "normalMap" : 2
+        },
+        "ShoulderBone_acromion.obj" : {
+            "textureMap" : 1,
+            "normalMap" : 2
+        }
+    },
+    "textureFiles" : {
+        "diffuse2.jpg" : 1,
+        "normal.jpg" : 2
+    },
+    "tetrahedralProperties" : {
+        "minStrain" : 0.7,
+        "maxStrain" : 1.4,
+        "lowTetWeight" : 300.0,
+        "highTetWeight" : 800.0,
+        "TJunctionWeight" : 50.0,
+        "collisionWeight": 40000.0,
+        "selfCollisionWeight" : 80000.0,
+        "fixedWeight" : 10000.0,
+        "periferalWeight" : 1000.0,
+        "hookWeight" : 800.0,
+        "sutureWeight" : 3000.0,
+        "autoSutureSpacing" : 0.10,
+        "nTetSizeLevels" : 4,
+        "maxDimMegatetSubdivs" : 40
+    },
+    "tetrahedralSubsets" : {
+        "ShoulderMuscle_deltoid.obj" : {
+            "minStrain" : 0.5,
+            "maxStrain" : 2.5,
+            "lowTetWeight" : 200.0,
+            "highTetWeight" : 600.0
+        },
+        "ShoulderTendon_supraspinatus.obj" : {
+            "minStrain" : 0.85,
+            "maxStrain" : 1.15,
+            "lowTetWeight" : 2000.0,
+            "highTetWeight" : 4000.0
+        }
+    },
+    "tissueRegions" : {
+        "skin_deltoid" : {
+            "minStrain" : 0.6,
+            "maxStrain" : 1.8
+        },
+        "deltoid_muscle" : {
+            "minStrain" : 0.5,
+            "maxStrain" : 2.5,
+            "lowTetWeight" : 200.0,
+            "highTetWeight" : 600.0,
+            "subsetObj" : "ShoulderMuscle_deltoid.obj"
+        },
+        "supraspinatus_tendon" : {
+            "minStrain" : 0.85,
+            "maxStrain" : 1.15,
+            "lowTetWeight" : 2000.0,
+            "highTetWeight" : 4000.0,
+            "subsetObj" : "ShoulderTendon_supraspinatus.obj"
+        },
+        "joint_capsule" : {
+            "minStrain" : 0.9,
+            "maxStrain" : 1.1,
+            "lowTetWeight" : 3000.0,
+            "highTetWeight" : 5000.0
+        },
+        "bone" : {
+            "minStrain" : 0.99,
+            "maxStrain" : 1.01,
+            "lowTetWeight" : 50000.0,
+            "highTetWeight" : 100000.0
+        }
+    },
+    "materialLayers" : {
+        "boundary" : 1,
+        "skinSurface" : 2,
+        "incisionEdge" : 3,
+        "subcutaneous" : 4,
+        "deepBed" : 5,
+        "muscle" : 6,
+        "periosteum" : 7,
+        "periosteumUndermined" : 8,
+        "undermineMarker" : 10,
+        "tendon" : 11,
+        "jointCapsule" : 12,
+        "boneSurface" : 13
+    },
+    "fixedCollisionSets" : {
+    }
+}

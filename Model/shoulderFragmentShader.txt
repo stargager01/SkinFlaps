@@ -1,5 +1,7 @@
-// Facial Surgery Fragment Shader (default)
-// For shoulder variant, see shoulderFragmentShader.txt
+// Shoulder Surgery Fragment Shader
+// Variant of mtFragmentShader.txt adapted for shoulder anatomy
+// Supports materials: skin(2), dermis(3), fat(4), fascia(5),
+//   muscle(6), periosteum(7-8), tendon(11), capsule(12), bone(13)
 #version 150
 // next line only necessary in web_gl. Has been in openGL since 2.0
 //	#extension GL_OES_standard_derivatives : enable
@@ -118,40 +120,99 @@ void main(void)
 	vec3 normDelta = vec3(0.0, 0.0, 1.0);
 	vec3 litColor = vec3(1.0, 1.0, 1.0);
 	vec4 nei;
-	if(material>9) {  // undermined skin or periosteum
+	if(material>12) {  // bone surface (material 13)
+		// Ivory/cream with subtle porous surface variation
+		faceUV = vTexCoords * 200.0;
+		sn = snoise(faceUV);
+		float pore = snoise(faceUV * 3.5);
+		// Subtle porous variation on an ivory base
+		float boneBase = 0.92 + 0.03 * sn;
+		float porosity = 0.02 * pore;
+		vFragColor = vec4(
+			boneBase + porosity,
+			boneBase - 0.04 + porosity,
+			boneBase - 0.10 + porosity * 0.5,
+			1.0);
+		specMult = 0.4;
+	}
+	else if(material>11) {  // joint capsule (material 12)
+		// Translucent pinkish-white, smooth surface
+		faceUV = vTexCoords * 120.0;
+		sn = snoise(faceUV);
+		float smooth_var = sn * 0.03;
+		vFragColor = vec4(
+			0.90 + smooth_var,
+			0.82 + smooth_var,
+			0.82 + smooth_var,
+			0.92);  // slightly translucent
+		specMult = 0.55;
+	}
+	else if(material>10) {  // tendon (material 11)
+		// Pearlescent white with fibrous longitudinal texture
+		// Fibers run along the t (v) texture coordinate direction
+		faceUV = vTexCoords;
+		// Longitudinal fiber pattern: high frequency along t, low along s
+		float fiber = snoise(vec2(faceUV.s * 60.0, faceUV.t * 8.0));
+		float fiberFine = snoise(vec2(faceUV.s * 120.0, faceUV.t * 12.0));
+		float fibrosity = fiber * 0.06 + fiberFine * 0.03;
+		// Pearlescent base: bright white with slight iridescence
+		float pearlBase = 0.94;
+		vFragColor = vec4(
+			pearlBase + fibrosity,
+			pearlBase - 0.01 + fibrosity,
+			pearlBase - 0.03 + fibrosity * 0.8,
+			1.0);
+		// Fiber-aligned normal perturbation for glistening effect
+		float fiberNx = snoise(vec2((faceUV.s + fatIncr) * 60.0, faceUV.t * 8.0))
+		              - snoise(vec2((faceUV.s - fatIncr) * 60.0, faceUV.t * 8.0));
+		normDelta = normalize(vec3(fiberNx * 0.4, 0.0, 1.0));
+		specMult = 0.75;
+	}
+	else if(material>9) {  // undermined skin or periosteum (material 10)
 		vFragColor = vec4(0.3882, 0.6706, 0.9333, 1.0);
-		specMult = 0.8; }
-	else if(material>6) {  // periosteum undermined 8, 7 not undermined
-		vFragColor = vec4(0.984, 0.9255, 0.855, 1.0);
-		specMult = 0.6; }
-	else if(material>5) {  // deep cut muscle
+		specMult = 0.8;
+	}
+	else if(material>6) {  // periosteum (material 7-8, undermined 8, not undermined 7)
+		// Shoulder periosteum: cream/white bone surface lining
+		vFragColor = vec4(0.96, 0.93, 0.87, 1.0);
+		specMult = 0.5;
+	}
+	else if(material>5) {  // deep cut muscle - deltoid (material 6)
+		// Brighter red skeletal muscle with striated texture
 		faceUV = vTexCoords * 80.0f;
 		nei[0] = snoise(faceUV - fatD);
 		nei[1] = snoise(faceUV + fatD);
 		nei[2] = snoise(faceUV - fatD.yx);
 		nei[3] = snoise(faceUV + fatD.yx);
 		getFat(nei,vFragColor,normDelta,specMult);
-                vFragColor = vec4(vFragColor.r * 0.65, vFragColor.r * 0.26,  vFragColor.r * 0.26, 1.0);
+		// Deltoid muscle: brighter red, more saturated than facial muscle
+		// Add striation effect along one direction
+		float striation = snoise(vec2(vTexCoords.s * 150.0, vTexCoords.t * 20.0)) * 0.06;
+		vFragColor = vec4(
+			vFragColor.r * 0.80 + striation,
+			vFragColor.r * 0.18 + striation * 0.3,
+			vFragColor.r * 0.18 + striation * 0.3,
+			1.0);
 	}
-	else if(material>4) {  // deep tissue bed
-	  vFragColor = texture(texture2, vTexCoords.st);
-// next sewction specific to old cleft model
-//          if(vFragColor.s>0.91 && vFragColor.t>0.91 && vFragColor.p<0.9) {
-//		faceUV = vTexCoords*400.0f;
-//		nei[0] = snoise(faceUV - fatD);
-//		nei[1] = snoise(faceUV + fatD);
-//		nei[2] = snoise(faceUV - fatD.yx);
-//		nei[3] = snoise(faceUV + fatD.yx);
-//		getFat(nei,vFragColor,normDelta,specMult);
-//         }
-//          else {
-            vec4 tx1 = texture(texture3,vTexCoords.st);
-            tx1.rgb -= vec3(0.5);
-            normDelta = tx1.rgb*2.0;
-            specMult = 0.11;
-//          }
+	else if(material>4) {  // deep tissue bed - fascial plane (material 5)
+		// Shoulder fascia: white/silvery connective tissue
+		faceUV = vTexCoords * 150.0;
+		sn = snoise(faceUV);
+		float fasciaSn = snoise(faceUV * 0.5);
+		// White-silver base with subtle fibrous variation
+		float fasciaBase = 0.88 + 0.04 * fasciaSn;
+		vFragColor = vec4(
+			fasciaBase + sn * 0.02,
+			fasciaBase + sn * 0.02,
+			fasciaBase + 0.02 + sn * 0.02,
+			1.0);
+		// Gentle normal perturbation for fibrous look
+		float nx = snoise(faceUV + vec2(fatIncr, 0.0)) - snoise(faceUV - vec2(fatIncr, 0.0));
+		float ny = snoise(faceUV + vec2(0.0, fatIncr)) - snoise(faceUV - vec2(0.0, fatIncr));
+		normDelta = normalize(vec3(nx * 0.3, ny * 0.3, 1.0));
+		specMult = 0.35;
         }
-	else if(material>3) {  // flap bottom fat
+	else if(material>3) {  // flap bottom fat / subcutaneous (material 4)
 		faceUV = vTexCoords*400.0f;
 		nei[0] = snoise(faceUV - fatD);
 		nei[1] = snoise(faceUV + fatD);
@@ -159,7 +220,7 @@ void main(void)
 		nei[3] = snoise(faceUV + fatD.yx);
 		getFat(nei,vFragColor,normDelta,specMult);
 	}
-	else if(material>2) {  // incised skin edge
+	else if(material>2) {  // incised skin edge (material 3)
 		faceUV = vTexCoords;
 		sn = snoise(vec2(dm*faceUV.t*3.0,0.5));
 		float val = (sn+1.0)*0.5;
@@ -191,18 +252,24 @@ void main(void)
 			}
 		}
         }
-	else if(material>1) {	// top of skin. material==2
-	  vec4 tx1 = texture(normalMap,vTexCoords.st);
-	  tx1.rgb -= vec3(0.5);
-	  normDelta = tx1.rgb*2.0;
-	  specMult = 0.11;
-	  vFragColor = texture(colorMap, vTexCoords.st); }
+	else if(material>1) {	// top of skin (material 2)
+		// Shoulder skin: slightly more tan, less pink than facial skin
+		vec4 tx1 = texture(normalMap,vTexCoords.st);
+		tx1.rgb -= vec3(0.5);
+		normDelta = tx1.rgb*2.0;
+		specMult = 0.11;
+		vFragColor = texture(colorMap, vTexCoords.st);
+		// Shift toward tan: reduce red slightly, boost green very slightly
+		vFragColor.r *= 0.97;
+		vFragColor.g *= 1.02;
+	}
 	else { // blank end material==1
-	  vec4 tx1 = vec4(1.0);
-	  tx1.rgb = vec3(0.1,0.18,0.33);
-	  normDelta = vec3(1.0);
-	  specMult = 0.0;
-	  vFragColor = tx1; }
+		vec4 tx1 = vec4(1.0);
+		tx1.rgb = vec3(0.1,0.18,0.33);
+		normDelta = vec3(1.0);
+		specMult = 0.0;
+		vFragColor = tx1;
+	}
 	lightVal += diffuseVal*max(dot(normDelta,vLightDir), 0.0);
 	if(material==1)
 		vFragColor *= 0.8 + 0.2*lightVal;

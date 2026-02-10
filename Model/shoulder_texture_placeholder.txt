@@ -1,0 +1,41 @@
+Shoulder Model Texture Placeholder
+====================================
+
+The shoulder prototype OBJ models currently lack dedicated texture maps.
+For initial pipeline testing, the existing face texture (diffuse2.jpg) can
+be used as a temporary substitute, since the UV coordinates in ShoulderSkin.obj
+and ShoulderDeepBed.obj will map into [0,1] range regardless.
+
+Required Textures for Production Use
+-------------------------------------
+
+1. Shoulder Diffuse Map (shoulder_diffuse.jpg)
+   - Resolution: 2048x2048 or 4096x4096
+   - Content: Skin-tone coloring appropriate for shoulder/upper arm area
+   - Should include subtle vascular patterns and natural skin tone variation
+   - UV layout matches the half-ellipsoid parameterization in ShoulderSkin.obj
+
+2. Shoulder Normal Map (shoulder_normal.jpg)
+   - Resolution: matching the diffuse map (2048x2048 or 4096x4096)
+   - Content: Surface detail normals for skin pore texture, wrinkle patterns
+   - Tangent-space normal map (blue-dominant, standard OpenGL convention)
+
+3. Deep Bed Texture (shoulder_deepbed_diffuse.jpg)
+   - Resolution: 1024x1024 (lower detail acceptable for subcutaneous surface)
+   - Content: Pinkish-red subcutaneous tissue coloring
+   - Can reuse existing deepBedTexture.jpg if color is acceptable
+
+4. Deep Bed Normal Map (shoulder_deepbed_normal.jpg)
+   - Resolution: matching the deep bed diffuse map
+   - Content: Fascial plane surface detail
+
+Texture Creation Notes
+-----------------------
+
+- Textures can be created in Substance Painter, GIMP, or Photoshop
+- For procedural generation, consider using Blender's shader-to-texture baking
+- The UV seam runs along the back of the shoulder (u=0 and u=1 edges)
+- The pole singularity at the top of the dome (v=1.0) may cause texture
+  stretching; keep important detail away from that region
+- For the .smd configuration, assign texture IDs matching the materialLayers
+  convention used by the face model (skinSurface = material 2)
