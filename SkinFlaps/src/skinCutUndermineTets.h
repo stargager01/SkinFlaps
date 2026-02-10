@@ -29,13 +29,10 @@
 // forward declarations
 class materialTriangles;
 class vnBccTetrahedra;
-class gl3wGraphics;
 
 class skinCutUndermineTets
 {
 public:
-
-	void setGl3wGraphics(gl3wGraphics *gl3w) { _gl3w = gl3w; }  // for debug - nuke later
 	bool skinCut(std::vector<Vec3f> &topCutPoints, std::vector<Vec3f> &topNormals, bool startOpen, bool endOpen);  // history version
 	float closestSkinIncisionPoint(const Vec3f xyz, int& triangle, int& edge, float& param);  // Input xyz, returns all 4
 	bool addUndermineTriangle(const int triangle, const int undermineMaterial, bool incisionConnect);
@@ -45,7 +42,7 @@ public:
 	void excise(const int triangle);
 	bool physicsRecutRequired(){ return _solidRecutRequired; }
 	bool setDeepBed(materialTriangles *mt, const std::string &deepBedPath, vnBccTetrahedra *activeVnt);
-	inline static void setVnBccTetrahedra(vnBccTetrahedra *activeVnt) { _vbt = activeVnt;  }
+	inline void setVnBccTetrahedra(vnBccTetrahedra *activeVnt) { _vbt = activeVnt;  }
 	inline void setMaterialTriangles(materialTriangles *mt) { _mt = mt; }
 	inline materialTriangles* getMaterialTriangles(){ return _mt; }
 	skinCutUndermineTets();
@@ -54,14 +51,13 @@ public:
 	~skinCutUndermineTets();
 
 protected:
-	static gl3wGraphics *_gl3w;
-	static materialTriangles *_mt;  // embedded surface
-	static vnBccTetrahedra *_vbt;  // above surface embedded in these current cut tets.
+	materialTriangles *_mt = nullptr;  // embedded surface
+	vnBccTetrahedra *_vbt = nullptr;  // above surface embedded in these current cut tets.
 	struct deepPoint{
 		Vec3f gridLocus;
 		int deepMtVertex;  // get tet & barycentrics from here when > -1
 	};
-	static std::unordered_map<int, deepPoint> _deepBed;
+	std::unordered_map<int, deepPoint> _deepBed;
 	// next is data of previously undermined triangles. _prevUnd2 are all previouslu undermined top triangles. Rest are previous undermines containing a non-duplicated deep vertex.  All are sorted vectors except _prevBot5.
 	// filled before each undermine by collectOldUndermineData()
 	std::vector<int> _prevUnd2, _prevEdge3;
@@ -75,7 +71,7 @@ protected:
 	bool _startOpen, _endOpen, _solidRecutRequired;
 
 	int deepPointTetWeight(const std::unordered_map<int, deepPoint>::iterator &dit, Vec3f &baryWeight);  // return deepPoint tet number and baryweight from its grid locus
-	int addSurfaceVertex(const int tet, const Vec3f &gridLocus);  // ? nuke
+	int addSurfaceVertex(const int tet, const Vec3f &gridLocus);  // TODO: evaluate whether this can be removed after data structure refactor
 	int createDeepBedVertex(std::unordered_map<int, deepPoint>::iterator &dit);
 	int addTinEdgeVertex(const Vec3f &closePoint, const Vec3f &nextConnectedPoint);
 	int TinSub(const int edgeTriangle, const float edgeParam);

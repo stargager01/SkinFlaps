@@ -1,3 +1,4 @@
+#include <cmath>
 #include <unordered_set>
 #include <array>
 #include <map>
@@ -10,7 +11,6 @@
 #include "tbb/tbb.h"
 #include "tetCollisions.h"
 
-#include "tbb/tick_count.h"  // for debug nuke later
 
 materialTriangles *tetCollisions::_mt;
 vnBccTetrahedra *tetCollisions::_vnt;
@@ -403,21 +403,6 @@ void tetCollisions::findSoftCollisionPairs() {
 }
 
 
-float tetCollisions::inverse_rsqrt(float number)
-{  // usual Quake cheat
-	const float threehalfs = 1.5F;
-	float x2 = number * 0.5F;
-	float y = number;
-	// evil floating point bit level hacking 
-	int i = *(int *)&y;
-	// value is pre-assumed 
-	i = 0x5f3759df - (i >> 1);
-	y = *(float *)&i;
-	// 1st iteration 
-	y = y * (threehalfs - (x2 * y * y));
-	return y;
-}
-
 void tetCollisions::addFixedCollisionSet(const std::string& levelSetFile, std::vector<int>& vertexIndices) {  // call once at load
 	fixedCollisionSet fc;
 	fc.levelSetFilename = levelSetFile;
@@ -483,7 +468,7 @@ float tetCollisions::rayDepth(const Vec3f &vtx, const Vec3f &nrm) {  // depth of
 		}
 	}
 	if (dSqMin < FLT_MAX && dSqMin > 1e-5f)
-		ret = 1.0f/inverse_rsqrt(dSqMin);
+		ret = std::sqrt(dSqMin);
 	else
 		ret = (_vnt->getMaximumCorner() - _vnt->getMinimumCorner()).length() * _vnt->getTetUnitSize() * 0.02f;  // maximum allowable bed ray depth
 	return ret;

@@ -35,7 +35,7 @@ public:
 		if (fence::_fenceSize < 10000.0f) _initialized = true;
 	}
 	void setFenceSize(float size) {fence::_fenceSize=size; if(_gl3w !=NULL) _initialized=true;}
-	void clear();	// deletes this fence COURT - ?nuke as no longer used
+	void clear();	// deletes this fence (actively called by surgicalActions)
 	bool isInitialized()	{return _initialized;}
 	fence();
 	~fence();

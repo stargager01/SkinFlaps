@@ -28,7 +28,7 @@
 // Please visit that site regarding MPL licensing and further implementation details.
 #include "CDT.h"
 
-float deepCut::_cutSpacingInv = 15.0f;  // inverse of deep cut interior point spacing. COURT - Model dependent. Should be moved into scene file later.
+// _cutSpacingInv is now an instance member (default 15.0f) configurable via setCutSpacingInv()
 
 bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPosts
 {

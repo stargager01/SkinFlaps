@@ -79,8 +79,6 @@ private:
 	float rayDepth(const Vec3f& Vtx, const Vec3f& nrm);
 
 	double _minTime, _maxTime;
-
-	float inverse_rsqrt(float number);
 };
 #endif  // __TET_COLLISIONS__
 

@@ -211,6 +211,11 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		_ptp.setTetProperties(lowTetWeight, highTetWeight, TJunctionWeight, strainMin, strainMax, collisionWeight, selfCollisionWeight, fixedWeight, periferalWeight);
 		_ptp.setHookSutureWeights(hookWeight, sutureWeight, 0.3f);
 		_surgAct->getSutures()->setAutoSutureSpacing(autoSutureSpacing);
+		// Store the global defaults so region-specific overrides can fall back to them
+		_globalStretchMin = strainMin;
+		_globalStretchMax = strainMax;
+		_globalLowTetWeight = lowTetWeight;
+		_globalHighTetWeight = highTetWeight;
 	}
 	struct tetSubset {
 		std::string objFile;
@@ -243,6 +248,45 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	else
 		;
+	// Parse optional "facialRegions" section for region-specific stretch limits (README Issue #1).
+	// Each region entry maps a named facial region to its stretch properties and an optional
+	// closed manifold OBJ file that spatially defines the region within the tet lattice.
+	// Example JSON:
+	//   "facialRegions" : {
+	//       "cheek" : { "minStrain": 0.6, "maxStrain": 2.0, "subsetObj": "cheekRegion.obj" },
+	//       "scalp" : { "minStrain": 0.85, "maxStrain": 1.0, "lowTetWeight": 800, "highTetWeight": 1800 }
+	//   }
+	// If no facialRegions section is present, default region properties are loaded automatically.
+	if ((oit = scnObj.find("facialRegions")) != scnObj.end()) {
+		json::Object regObj = oit->second.ToObject();
+		for (suboit = regObj.begin(); suboit != regObj.end(); ++suboit) {
+			facialRegionProperties rp;
+			rp.name = suboit->first;
+			rp.stretchMin = _globalStretchMin;  // default to global values
+			rp.stretchMax = _globalStretchMax;
+			rp.lowTetWeight = 0.0f;
+			rp.highTetWeight = 0.0f;
+			json::Object regData = suboit->second.ToObject();
+			for (auto dataoit = regData.begin(); dataoit != regData.end(); ++dataoit) {
+				if (dataoit->first == "minStrain")
+					rp.stretchMin = dataoit->second.ToFloat();
+				else if (dataoit->first == "maxStrain")
+					rp.stretchMax = dataoit->second.ToFloat();
+				else if (dataoit->first == "lowTetWeight")
+					rp.lowTetWeight = dataoit->second.ToFloat();
+				else if (dataoit->first == "highTetWeight")
+					rp.highTetWeight = dataoit->second.ToFloat();
+				else if (dataoit->first == "subsetObj") {
+					rp.subsetObjFile = std::string(dataDirectory) + dataoit->second.ToString();
+				}
+			}
+			_regionProperties.push_back(rp);
+		}
+	}
+	else {
+		// No facialRegions section in scene file - load clinically-informed defaults.
+		_regionProperties = getDefaultRegionProperties();
+	}
 	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // now creating operable lattice on load
 	_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
 	if (!_surgAct->getDeepCutPtr()->setDeepBed(_mt, deepBedFilepath.c_str(), &_vnTets)){
@@ -252,6 +296,9 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		for (auto& ts : tetSubsets)
 			_tetSubsets.createSubset(&_vnTets, ts.objFile, ts.lowTetWeight, ts.highTetWeight, ts.strainMin, ts.strainMax);
 	}
+	// Apply region-specific stretch subsets (those with OBJ files defining spatial extent).
+	// This uses the same tetSubset mechanism as tetrahedralSubsets above.
+	applyRegionSubsets(dataDirectory);
 	_gl3w->frameScene(true);  // computes bounding spheres
 	return true;
 }
@@ -308,9 +355,12 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 		_surgAct->getDeepCutPtr()->setVnBccTetrahedra(&_vnTets);
 		_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
 
-//		std::cout << "Tet number at this time is " << _vnTets.tetNumber() << "\n";
+		// TODO: Configure cut spacing from scene file. Example:
+		// _surgAct->getDeepCutPtr()->setCutSpacingInv(sceneFile.cutSpacingInv);
 
-		_surgAct->getHooks()->setSpringConstant(_lowTetWeight * 1.5f);  // COURT fix me after macrotet issue resolved
+		// TODO: Spring constant is a placeholder; revisit after macrotet issue is resolved.
+		// This should be derived from scene/material properties rather than hardcoded.
+		_surgAct->getHooks()->setSpringConstant(_lowTetWeight * 1.5f);
 
 #ifdef NO_PHYSICS
 		_firstSpatialCoords.assign(_vnTets.nodeNumber(), Vec3f());
@@ -548,11 +598,155 @@ void bccTetScene::drawTetLattice()
 	_gl3w->getLines()->updatePoints(_nodeGraphicsPositions);
 }
 
-bccTetScene::bccTetScene() : _physicsPaused(false), _forcesApplied(false), _tetsModified(false)
+bccTetScene::bccTetScene() : _physicsPaused(false), _forcesApplied(false), _tetsModified(false),
+	_globalStretchMin(0.8f), _globalStretchMax(1.26f), _globalLowTetWeight(500.0f), _globalHighTetWeight(1000.0f)
 {
 	_tetCol.setPdTetPhysics(&_ptp); // Qisi:set ptp for tetCol so things of ptp are accessible inside of tetCol
 }
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Region-specific stretch limit methods (README Issue #1)
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+std::vector<facialRegionProperties> bccTetScene::getDefaultRegionProperties() {
+	// Clinically-informed default stretch properties for common facial regions.
+	// These values reflect known differences in skin extensibility across the face:
+	//
+	// stretchMin: minimum strain ratio (compression limit). Values < 1.0 allow compression.
+	//   Lower values permit more compression before the strain constraint activates.
+	// stretchMax: maximum strain ratio (extension limit). Values > 1.0 allow stretch.
+	//   Higher values permit more extension before the strain constraint activates.
+	//
+	// The global defaults for the cleft model are minStrain=0.8, maxStrain=1.26.
+	// Region-specific values scale relative to tissue extensibility:
+	//   - Cheek/eyelid skin is loose and mobile, allowing substantially more stretch.
+	//   - Forehead skin is moderately adherent to the frontalis muscle.
+	//   - Scalp skin is tightly bound by the galea aponeurotica, limiting stretch.
+	//   - Nasal skin is tightly bound to the underlying cartilage framework.
+	//
+	// lowTetWeight/highTetWeight: when non-zero, override the global tet stiffness weights
+	// for that region. When 0, the global values from "tetrahedralProperties" are used.
+	//
+	// subsetObjFile: left empty in defaults. To spatially map a region, the user should
+	// create a closed manifold OBJ that encloses the facial region tets and set this path
+	// via setRegionProperties() or the "facialRegions" section of the .smd file.
+	// The existing tetSubset::createSubset() mechanism will then identify which tets fall
+	// inside that manifold and apply the region's strain limits to them.
+
+	std::vector<facialRegionProperties> defaults;
+
+	// Cheek: loose, mobile skin with significant subcutaneous fat. High extensibility.
+	// Surgically, cheek advancement flaps routinely stretch 50-100% beyond rest length.
+	defaults.push_back(facialRegionProperties("cheek", 0.5f, 2.0f));
+
+	// Eyelid: very thin skin with minimal subcutaneous tissue. Highly elastic.
+	// Eyelid skin is the thinnest in the body and stretches readily.
+	defaults.push_back(facialRegionProperties("eyelid", 0.5f, 2.0f));
+
+	// Forehead: moderately thick skin adherent to frontalis muscle via galea.
+	// Moderate extensibility - can be stretched but less than cheek.
+	defaults.push_back(facialRegionProperties("forehead", 0.75f, 1.2f));
+
+	// Scalp: thick skin firmly bound to galea aponeurotica.
+	// Very limited stretch without galeal scoring. Among the least extensible facial skin.
+	defaults.push_back(facialRegionProperties("scalp", 0.85f, 1.0f));
+
+	// Nose: skin tightly adherent to underlying cartilage and bone framework.
+	// Minimal extensibility, especially over the dorsum and tip.
+	defaults.push_back(facialRegionProperties("nose", 0.85f, 1.0f));
+
+	// Lip: moderately elastic skin and mucosa with underlying orbicularis oris muscle.
+	// Moderate extensibility, between cheek and forehead.
+	defaults.push_back(facialRegionProperties("lip", 0.6f, 1.5f));
+
+	// Periorbital: skin around the orbit, thicker than eyelid but thinner than forehead.
+	// Moderate-to-high extensibility.
+	defaults.push_back(facialRegionProperties("periorbital", 0.6f, 1.6f));
+
+	return defaults;
+}
+
+void bccTetScene::setRegionStretchLimit(const std::string& regionName, float stretchMin, float stretchMax) {
+	for (auto& rp : _regionProperties) {
+		if (rp.name == regionName) {
+			rp.stretchMin = stretchMin;
+			rp.stretchMax = stretchMax;
+			return;
+		}
+	}
+	// Region not found - create a new entry with the given stretch limits.
+	_regionProperties.push_back(facialRegionProperties(regionName, stretchMin, stretchMax));
+}
+
+void bccTetScene::setRegionProperties(const facialRegionProperties& props) {
+	for (auto& rp : _regionProperties) {
+		if (rp.name == props.name) {
+			rp = props;
+			return;
+		}
+	}
+	// Region not found - add it.
+	_regionProperties.push_back(props);
+}
+
+const facialRegionProperties* bccTetScene::getRegionProperties(const std::string& regionName) const {
+	for (const auto& rp : _regionProperties) {
+		if (rp.name == regionName)
+			return &rp;
+	}
+	return nullptr;
+}
+
+void bccTetScene::setGlobalStretchLimit(float stretchMin, float stretchMax) {
+	_globalStretchMin = stretchMin;
+	_globalStretchMax = stretchMax;
+	// Also update all region properties to use the same uniform limits.
+	// This is the fallback for when region-specific differences are not desired.
+	for (auto& rp : _regionProperties) {
+		rp.stretchMin = stretchMin;
+		rp.stretchMax = stretchMax;
+	}
+}
+
+void bccTetScene::applyRegionSubsets(const std::string& dataDirectory) {
+	// For each facial region that has a spatial extent defined by a closed manifold OBJ file,
+	// create a tetSubset with the region's strain limits and stiffness overrides.
+	// This uses the same tetSubset::createSubset() mechanism used by "tetrahedralSubsets"
+	// in the .smd file. The OBJ file encloses the volume of tets belonging to that region,
+	// and createSubset() identifies which tets fall inside based on centroid containment.
+	//
+	// For regions without an OBJ file, the properties are stored but not yet spatially mapped.
+	// Future integration options for automatic spatial mapping include:
+	//   1. Surface material ID mapping: assign surface triangles to regions by material ID,
+	//      then find the tets that contain vertices of those triangles.
+	//   2. Bounding box containment: define axis-aligned bounding boxes for each region and
+	//      assign tets whose centroids fall within the box.
+	//   3. Vertex painting / atlas lookup: use UV-space region labels from the texture atlas
+	//      to assign surface vertices to regions, then propagate to containing tets.
+	//   4. Signed distance field: compute SDF for each region surface and assign tets by
+	//      evaluating their centroid positions against the SDF.
+	//
+	// Any of these approaches would replace the subsetObjFile requirement with an automatic
+	// region assignment, making the system more user-friendly for clinical users.
+
+	for (const auto& rp : _regionProperties) {
+		if (rp.subsetObjFile.empty())
+			continue;  // No spatial mapping for this region - skip.
+
+		// Determine the stiffness weights to use for this region.
+		// If the region specifies non-zero weights, use them. Otherwise fall back to globals.
+		float lowW = (rp.lowTetWeight > 0.0f) ? rp.lowTetWeight : _globalLowTetWeight;
+		float highW = (rp.highTetWeight > 0.0f) ? rp.highTetWeight : _globalHighTetWeight;
+
+		bool ok = _tetSubsets.createSubset(&_vnTets, rp.subsetObjFile, lowW, highW, rp.stretchMin, rp.stretchMax);
+		if (!ok) {
+			std::string msg = "Warning: could not create tet subset for facial region '" + rp.name +
+				"' from OBJ file: " + rp.subsetObjFile;
+			std::cout << msg << "\n";
+		}
+	}
+}
 
 bccTetScene::~bccTetScene()
 {

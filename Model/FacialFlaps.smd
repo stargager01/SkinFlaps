@@ -57,6 +57,36 @@
           "highTetWeight" : 5000.0
         }
     },
+    "facialRegions" : {
+        "cheek" : {
+            "minStrain" : 0.5,
+            "maxStrain" : 2.0
+        },
+        "eyelid" : {
+            "minStrain" : 0.5,
+            "maxStrain" : 2.0
+        },
+        "forehead" : {
+            "minStrain" : 0.75,
+            "maxStrain" : 1.2
+        },
+        "scalp" : {
+            "minStrain" : 0.85,
+            "maxStrain" : 1.0
+        },
+        "nose" : {
+            "minStrain" : 0.85,
+            "maxStrain" : 1.0
+        },
+        "lip" : {
+            "minStrain" : 0.6,
+            "maxStrain" : 1.5
+        },
+        "periorbital" : {
+            "minStrain" : 0.6,
+            "maxStrain" : 1.6
+        }
+    },
     "fixedCollisionSets" : {
         "eye_right_CBC.obj" : [
   1247,

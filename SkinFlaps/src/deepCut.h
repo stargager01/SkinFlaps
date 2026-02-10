@@ -16,7 +16,6 @@
 
 #include <vector>
 #include <array>
-#include <stdexcept>
 #include "Vec3f.h"
 #include "materialTriangles.h"
 #include "skinCutUndermineTets.h"
@@ -32,8 +31,12 @@ struct rayTriangleIntersect;
 class deepCut : public skinCutUndermineTets
 {
 public:
-	void setGl3wGraphics(gl3wGraphics *gl3w) { _gl3w = gl3w; }  // for debug - nuke later
 	void setDiagnosticLog(bool enable) { _diagnosticLog = enable; }
+
+	// Set inverse of deep cut interior point spacing. Default is 15.0f.
+	// This value is model-dependent and should be configured per scene file.
+	void setCutSpacingInv(float spacing) { _cutSpacingInv = spacing; }
+	float getCutSpacingInv() const { return _cutSpacingInv; }
 
 	bool inputCorrectFence(fence* fp, FacialFlapsGui* ffg);
 	int addDeepPost(const int triangle, const float(&uv)[2], const Vec3d& rayDirection, bool closedEnd);
@@ -115,7 +118,7 @@ protected:
 
 	std::vector<Vec3d> _deepXyz;  // deep spatial coords for each mt vertex. material 2 vertices use deepBed coords.  rayIntersectSolids() repeatedly use these
 	float _maxSceneSize;
-	static float _cutSpacingInv;  // spacing between interior cut points inverted
+	float _cutSpacingInv = 15.0f;  // inverse of deep cut interior point spacing; model-dependent, configurable via setCutSpacingInv()
 	int _preDeepCutVerts;
 	int _previousSkinTopEnd, _loopSkinTopBegin;
 	std::list<std::list<int> > _holePolyLines;  // pair first is deepVert, second topVert
@@ -124,19 +127,6 @@ protected:
 		normal = bl.e11 * u + bl.e00 * (1.0 - u);
 		Vec3d V = bl.e01 * v + bl.e10 * (1.0 - v);
 		normal = normal ^ V;
-	}
-
-	double postV(const double& depth, const bilinearPatch& bl, const bool uZero) {
-		throw(std::logic_error("Unexpected call to deepCut::postV: this function is deprecated"));
-
-		double len;
-		if (uZero)
-			len = bl.e00.length();
-		else
-			len = bl.e11.length();
-		if (len < 1e-16)
-			return 0.0;
-		return 1.0 - depth / len;
 	}
 
 	bool getDeepSpatialCoordinates();  // used in new version.  Must have physics paused until deepCut complete or will be invalid.

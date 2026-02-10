@@ -25,13 +25,6 @@
 #include "insidePolygon.h"
 #include "skinCutUndermineTets.h"
 #include "surgicalActions.h"
-#include "gl3wGraphics.h"
-
-// could also have done a singleton class, but more cumbersome
-std::unordered_map<int, skinCutUndermineTets::deepPoint> skinCutUndermineTets::_deepBed;
-gl3wGraphics* skinCutUndermineTets::_gl3w;
-materialTriangles* skinCutUndermineTets::_mt;
-vnBccTetrahedra* skinCutUndermineTets::_vbt;
 
 bool skinCutUndermineTets::skinCut(std::vector<Vec3f> &topCutPoints, std::vector<Vec3f> &topNormals, bool startOpen, bool endOpen)
 {  //  Only cuts material 2 triangles down to deep bed and creates single vertex deep cut line along with material 3 side triangles.

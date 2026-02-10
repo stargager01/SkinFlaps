@@ -1222,7 +1222,7 @@ void vnBccTetCutter_tbb::assignExteriorTetNodes(std::array<short, 3>& locus, std
 		std::list<std::list<nodeTetSegment* > * > poolLinks;
 		for (auto &tp : tetPools) {
 			for (auto &pe : tp) {
-				assert(tnit->tetIdx != pe->tetIdx);  // obvious nuke me
+				assert(tnit->tetIdx != pe->tetIdx);  // TODO: remove this assert once tet pool logic is validated
 				if (sortedVectorsIntersect(_surfaceTetTris[tnit->tetIdx - _vbt->_nMegatets].tris, _surfaceTetTris[pe->tetIdx - _vbt->_nMegatets].tris)) {
 					poolLinks.push_back(&tp);
 					break;
@@ -1842,7 +1842,7 @@ void vnBccTetCutter_tbb::getConnectedComponents(const tetTriangles& tt, oneapi::
 				nodeTetSegment nts;
 				nts.tetNodeIndex = i;
 				nts.tetIdx = p.tetIndex;
-				nts.tetNodeTris.assign(p.tris.begin(), p.tris.end());  // COURT nuke afternew data structure
+				nts.tetNodeTris.assign(p.tris.begin(), p.tris.end());  // TODO: remove after new data structure is in place
 				acc->second.push_back(nts);
 			}
 		}
