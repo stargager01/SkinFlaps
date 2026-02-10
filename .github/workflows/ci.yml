@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------
+  # Job 1: Validate history files (fast, no build or deps needed)
+  # ---------------------------------------------------------------
+  # History (.hst) files are JSON-encoded surgical operation sequences.
+  # This job catches malformed JSON and structural errors early.
+  validate-history:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate history files
+        run: python3 tests/validate_history.py
+
+  # ---------------------------------------------------------------
+  # Job 2: Linux build with GCC + CMake
+  # ---------------------------------------------------------------
+  # NOTE: A full build requires Intel oneAPI (MKL + TBB), CUDA
+  # Toolkit, GLFW, and Eigen3. The Intel and CUDA dependencies are
+  # large and non-trivial to install in CI. The steps below document
+  # the full dependency chain; uncomment and adapt as your CI budget
+  # and runner capacity allow.
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            libglfw3-dev \
+            libeigen3-dev \
+            libgl-dev
+
+      # ---- Intel oneAPI MKL + TBB ----
+      # The physics library (PDTetPhysics) depends on Intel MKL and
+      # OpenMP via oneAPI. To install in CI, add the Intel APT repo:
+      #
+      # - name: Install Intel oneAPI MKL and TBB
+      #   run: |
+      #     # Import Intel GPG key and add the APT repository
+      #     wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+      #       | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+      #     echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] \
+      #       https://apt.repos.intel.com/oneapi all main" \
+      #       | sudo tee /etc/apt/sources.list.d/oneAPI.list
+      #     sudo apt-get update
+      #     sudo apt-get install -y intel-oneapi-mkl-devel intel-oneapi-tbb-devel
+      #     # Source the oneAPI environment so CMake can find MKL
+      #     source /opt/intel/oneapi/setvars.sh
+
+      # ---- NVIDIA CUDA Toolkit ----
+      # PDTetPhysics also requires CUDA (cudart, cusolver, cusparse).
+      # GitHub-hosted runners do not include GPUs, so CUDA compilation
+      # can only verify host-side code. To install:
+      #
+      # - name: Install CUDA Toolkit
+      #   uses: Jimver/cuda-toolkit@v0.2.16
+      #   with:
+      #     cuda: "12.3.2"
+      #     method: network
+
+      - name: Configure (dry-run documentation)
+        run: |
+          echo "======================================================="
+          echo "Full CMake configure requires Intel oneAPI and CUDA."
+          echo "See commented steps above for installation instructions."
+          echo "======================================================="
+          echo ""
+          echo "Once dependencies are installed, run:"
+          echo "  source /opt/intel/oneapi/setvars.sh"
+          echo "  cmake -B build -DCMAKE_BUILD_TYPE=Release"
+          echo "  cmake --build build --parallel \$(nproc)"
+          echo ""
+          echo "Skipping actual build in CI until dependencies are provisioned."
+
+      # Uncomment the following once all dependencies are available:
+      #
+      # - name: Configure
+      #   run: |
+      #     source /opt/intel/oneapi/setvars.sh
+      #     cmake -B build -DCMAKE_BUILD_TYPE=Release
+      #
+      # - name: Build
+      #   run: |
+      #     source /opt/intel/oneapi/setvars.sh
+      #     cmake --build build --parallel $(nproc)
+      #
+      # - name: Run unit tests
+      #   run: |
+      #     cd build
+      #     ctest --output-on-failure
+
+  # ---------------------------------------------------------------
+  # Job 3: Windows build with MSVC (on PRs to main only)
+  # ---------------------------------------------------------------
+  # The primary development platform is Windows with Visual Studio
+  # 2022. This job runs only on pull requests to main to conserve
+  # CI minutes. It uses the existing .sln / .vcxproj files.
+  build-windows:
+    runs-on: windows-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- Intel oneAPI (Windows) ----
+      # The Windows build also requires Intel oneAPI MKL + TBB.
+      # Intel provides a Windows installer and GitHub Actions cache
+      # patterns. See:
+      #   https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html
+      #
+      # - name: Install Intel oneAPI
+      #   run: |
+      #     # Download and run the oneAPI offline/online installer
+      #     # or use the winget / choco package if available.
+
+      # ---- CUDA Toolkit (Windows) ----
+      # - name: Install CUDA Toolkit
+      #   uses: Jimver/cuda-toolkit@v0.2.16
+      #   with:
+      #     cuda: "12.3.2"
+
+      # ---- GLFW (Windows) ----
+      # GLFW can be installed via vcpkg or downloaded as pre-built
+      # binaries from https://www.glfw.org/download.
+      #
+      # - name: Install GLFW via vcpkg
+      #   run: |
+      #     vcpkg install glfw3:x64-windows
+
+      - name: Configure (dry-run documentation)
+        shell: pwsh
+        run: |
+          Write-Host "======================================================="
+          Write-Host "Full MSVC build requires Intel oneAPI, CUDA, and GLFW."
+          Write-Host "See commented steps above for installation instructions."
+          Write-Host "======================================================="
+          Write-Host ""
+          Write-Host "Once dependencies are installed, build with:"
+          Write-Host "  msbuild Build\msvc_2022\SkinFlaps.sln /p:Configuration=Release /p:Platform=x64"
+          Write-Host ""
+          Write-Host "Or with CMake:"
+          Write-Host "  cmake -B build -G 'Visual Studio 17 2022' -A x64"
+          Write-Host "  cmake --build build --config Release"
+
+      # Uncomment once dependencies are provisioned:
+      #
+      # - name: Setup MSBuild
+      #   uses: microsoft/setup-msbuild@v2
+      #
+      # - name: Build with MSBuild
+      #   run: |
+      #     msbuild Build\msvc_2022\SkinFlaps.sln `
+      #       /p:Configuration=Release `
+      #       /p:Platform=x64 `
+      #       /m

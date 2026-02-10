@@ -1,6 +1,8 @@
-## **SkinFlaps** - 
+## **SkinFlaps** -
 ### A soft tissue surgical simulator using projective dynamics
 
+<!-- CI status badge: update OWNER/REPO if the repository is forked or transferred -->
+[![CI](https://github.com/stargager01/SkinFlaps/actions/workflows/ci.yml/badge.svg)](https://github.com/stargager01/SkinFlaps/actions/workflows/ci.yml)
 
 ----------
 
