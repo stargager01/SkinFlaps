@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <mutex>
 #include "hooks.h"
 #include "sutures.h"
 #include "surgGraphics.h"
@@ -59,6 +60,7 @@ public:
 	void pausePhysics();
 	bool _strongHooks;  // COURT - hack for collision cheating purposes
 	std::atomic<bool> physicsDone, newTopology, taskThreadError;
+	std::mutex _errorMutex;
 	std::string taskThreadErrorStr;
 	bccTetScene _bts;
 

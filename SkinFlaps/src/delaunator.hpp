@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <stdexcept>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -470,7 +471,10 @@ namespace delaunator {
         m_edge_stack.clear();
 
         // recursion eliminated with a fixed-size stack
+        int _loopGuard = 0;
         while (true) {
+            if (++_loopGuard > 100000)
+                throw(std::runtime_error("Iteration limit exceeded in Delaunator::legalize()."));
             const size_t b = halfedges[a];
 
             /* if the pair of triangles doesn't satisfy the Delaunay condition

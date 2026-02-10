@@ -10,6 +10,7 @@
 
 #include <tuple>
 #include <assert.h>
+#include <stdexcept>
 #include <algorithm>
 #include <functional>
 #include <deque>
@@ -65,7 +66,7 @@ bool skinCutUndermineTets::skinCut(std::vector<Vec3f> &topCutPoints, std::vector
 		}
 		assert((topCutPoints[i] - v3).length2() < 0.001f);
 		if (uv[0] < -0.0001 || uv[1]<-0.0001 || uv[0] + uv[1]>1.001f)
-			assert(false);
+			throw(std::logic_error("Unexpected state in skinCut: invalid barycentric coordinates"));
 		else
 			createFlapTopBottomVertices(tri, uv, topMtVertices[i], deepVertexLine[i]);
 		if (i < 1)
@@ -306,7 +307,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 		uvDeep[1] = 1.0f - uv[0] - uv[1];
 	}
 	else
-		assert(false);
+		throw(std::logic_error("Unexpected state in createFlapTopBottomVertices: vertex index j out of range"));
 	tet = _vbt->parametricTriangleTet(bottomTriangle, uvDeep, dp.gridLocus);
 	bottomVertex = _mt->addNewVertexInMidTriangle(bottomTriangle, uvDeep);
 	dp.deepMtVertex = bottomVertex;
@@ -447,7 +448,10 @@ bool skinCutUndermineTets::topDeepSplit_Sub(std::list<int> &topVerts, std::list<
 		if (dvit != deepVerts.begin())
 			startVertex = -1;
 		std::list<int> dVsub;
+		int _loopGuard = 0;
 		while (true) {
+			if (++_loopGuard > 10000)
+				throw(std::runtime_error("Iteration limit exceeded in skinCutUndermineTets::topDeepSplit_Sub()."));
 			dVsub.push_back(*dvit);
 			++dvit;
 			if (dvit == deepVerts.end() || *_mt->vertexFaceTriangle(*dvit) == 0x80000000)
@@ -765,7 +769,10 @@ bool skinCutUndermineTets::planeCutSurfaceLine(const int startTopV, const int en
 	triEdges.push_back(_mt->triAdjs(i)[j]);
 	assert(triEdges.back() != 3);
 	edgeParams.push_back(1.0f - edgeParam);
+	int _loopGuard1 = 0;
 	do{
+		if (++_loopGuard1 > 10000)
+			throw(std::runtime_error("Iteration limit exceeded in skinCutUndermineTets::planeCutSurfaceLine()."));
 		i = triEdges.back() >> 2;
 		j = triEdges.back() & 3;
 		int k;
@@ -802,7 +809,7 @@ bool skinCutUndermineTets::planeCutSurfaceLine(const int startTopV, const int en
 		else if ((j & 3) < 3)
 			uv[1] = 1.0f - (float)edgeParams[i];
 		else
-			assert(false);
+			throw(std::logic_error("Unexpected state in planeCutSurfaceLine: edge index out of range"));
 		int topV, botV;
 		createFlapTopBottomVertices(j >> 2, uv, topV, botV);
 		newTopVerts.push_back(topV);

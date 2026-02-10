@@ -4,6 +4,8 @@
 // Read online: https://github.com/ocornut/imgui/tree/master/docs
 
 #include <stdio.h>
+#include <stdexcept>
+#include <string>
 #include <tbb/task_arena.h>
 #include <atomic>
 #include "surgicalActions.h"
@@ -51,7 +53,11 @@ int main(int, char**)
 
 			if (sa->taskThreadError) {
 				sa->taskThreadError = false;
-				std::string err = sa->taskThreadErrorStr;
+				std::string err;
+				{
+					std::lock_guard<std::mutex> lock(sa->_errorMutex);
+					err = sa->taskThreadErrorStr;
+				}
 				ffg.handleThrow(err.c_str());
 				throw(std::logic_error(err));
 			}
@@ -88,10 +94,21 @@ int main(int, char**)
 								bts->updatePhysics();
 								sa->physicsDone = true;
 							}
+							catch (const std::exception& e) {
+								updateThrow = true;
+								sa->taskThreadError = true;
+								{
+									std::lock_guard<std::mutex> lock(sa->_errorMutex);
+									sa->taskThreadErrorStr = std::string("Couldn't update physics after last action: ") + e.what();
+								}
+							}
 							catch (...) {
 								updateThrow = true;
 								sa->taskThreadError = true;
-								sa->taskThreadErrorStr = "Couldn't update physics after last action.";
+								{
+									std::lock_guard<std::mutex> lock(sa->_errorMutex);
+									sa->taskThreadErrorStr = "Couldn't update physics after last action.";
+								}
 							}
 							}
 						);
@@ -118,6 +135,11 @@ int main(int, char**)
 			ffg.nextCounter = 0;
 			std::string err = "Not enough memory in this machine to handle this program.\n";
 			err += ba.what();
+			ffg.handleThrow(err.c_str());
+		}
+		catch (const std::exception& e) {
+			ffg.nextCounter = 0;
+			std::string err = std::string("Program error: ") + e.what();
 			ffg.handleThrow(err.c_str());
 		}
 		catch (...) {

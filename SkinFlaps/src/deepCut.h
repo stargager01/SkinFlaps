@@ -16,6 +16,7 @@
 
 #include <vector>
 #include <array>
+#include <stdexcept>
 #include "Vec3f.h"
 #include "materialTriangles.h"
 #include "skinCutUndermineTets.h"
@@ -124,7 +125,7 @@ protected:
 	}
 
 	double postV(const double& depth, const bilinearPatch& bl, const bool uZero) {
-		assert(false);  // nuke me
+		throw(std::logic_error("Unexpected call to deepCut::postV: this function is deprecated"));
 
 		double len;
 		if (uZero)

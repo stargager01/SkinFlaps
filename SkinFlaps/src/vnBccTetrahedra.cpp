@@ -8,6 +8,7 @@
 
 #include <tuple>
 #include <assert.h>
+#include <stdexcept>
 #include <algorithm>
 #include <iterator>
 #include <set>
@@ -516,7 +517,10 @@ int vnBccTetrahedra::vertexSolidLinePath(const int vertex, const Vec3f materialT
 		return false;
 	};
 	std::list<tetLink> tree;
+	int _loopGuard = 0;
 	do {
+		if (++_loopGuard > 10000)
+			throw(std::runtime_error("Iteration limit exceeded in vnBccTetrahedra::vertexSolidLinePath()."));
 		while (prevTet.p < 1.0) {
 			if (!tetIntersect(_tetCentroids[prevTet.tet], prevTet.face, prevTet.p))
 				throw(std::logic_error("Program error in vertexSolidLinePath()\n"));
@@ -685,7 +689,10 @@ void vnBccTetrahedra::materialCoordsToNodeSpatialVector()
 
 bool vnBccTetrahedra::insideTet(const bccTetCentroid& tc, const Vec3f& gridLocus) {
 	int dd = 1, hc = -1;
+	int _loopGuard1 = 0;
 	while (true) {
+		if (++_loopGuard1 > 1000)
+			throw(std::runtime_error("Iteration limit exceeded in vnBccTetrahedra::insideTet(Vec3f)."));
 		if (tc[0] & dd) {
 			hc = 0;
 			break;
@@ -750,7 +757,10 @@ bool vnBccTetrahedra::insideTet(const bccTetCentroid& tc, const Vec3f& gridLocus
 
 bool vnBccTetrahedra::insideTet(const bccTetCentroid& tc, const std::array<short, 3>& nodeLocus) {
 	int dd = 1, hc = -1;
+	int _loopGuard2 = 0;
 	while (true) {
+		if (++_loopGuard2 > 1000)
+			throw(std::runtime_error("Iteration limit exceeded in vnBccTetrahedra::insideTet(nodeLocus)."));
 		if (tc[0] & dd) {
 			hc = 0;
 			break;
@@ -845,7 +855,7 @@ int vnBccTetrahedra::parametricEdgeTet(const int vertex0, const int vertex1, con
 	// find candidate cubes
 	int nTets = std::distance(pr.first, pr.second);
 	if (nTets < 1) {
-		assert(false);
+		throw(std::logic_error("Unexpected state in parametricEdgeTet: no candidate tetrahedra found"));
 		return -1;
 	}
 	else if (nTets < 2)
@@ -859,7 +869,7 @@ int vnBccTetrahedra::parametricEdgeTet(const int vertex0, const int vertex1, con
 		assert(tetOut > -1);
 		return tetOut;
 	}
-	assert(false);
+	throw(std::logic_error("Unexpected state in parametricEdgeTet: unreachable code path reached"));
 	return -1;
 }
 
@@ -895,7 +905,7 @@ int vnBccTetrahedra::parametricTriangleTet(const int triangle, const float (&uv)
 	// find candidate cubes
 	int nTets = std::distance(pr.first, pr.second);
 	if (nTets < 1) {
-		assert(false);
+		throw(std::logic_error("Unexpected state in parametricTriangleTet: no candidate tetrahedra found"));
 		return -1;
 	}
 	else if (nTets < 2)

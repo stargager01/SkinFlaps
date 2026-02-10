@@ -16,6 +16,7 @@
 #include <string>
 #include <fstream>
 #include <algorithm>
+#include <stdexcept>
 #include "gl3wGraphics.h"
 #include "surgicalActions.h"
 #include "boundingBox.h"
@@ -270,7 +271,10 @@ void bccTetScene::updateOldPhysicsLattice()
 		uint8_t sizeBit = 1;
 		auto& c = _vnTets.tetCentroid(i);
 		unsigned short ored = c[0] | c[1] | c[2];
+		int _loopGuard = 0;
 		while (true) {
+			if (++_loopGuard > 1000)
+				throw(std::runtime_error("Iteration limit exceeded in bccTetScene::updateOldPhysicsLattice()."));
 			if (ored & sizeBit)
 					break;
 			sizeBit <<= 1;
@@ -318,7 +322,10 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 			// COURT may do faster with just first 2 nodes
 			uint8_t sizeBit = 1;
 			auto& c = _vnTets.tetCentroid(i);
+			int _loopGuard = 0;
 			while (true) {
+				if (++_loopGuard > 1000)
+					throw(std::runtime_error("Iteration limit exceeded in bccTetScene::createNewPhysicsLattice()."));
 				if (c[0] & sizeBit || c[1] & sizeBit || c[2] & sizeBit)
 					break;
 				sizeBit <<= 1;
@@ -341,7 +348,10 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 	}  // end try block
 	catch (...) {
 		_surgAct->taskThreadError = true;
-		_surgAct->taskThreadErrorStr = "Couldn't create the initial physics lattice. Probable model error.";
+		{
+			std::lock_guard<std::mutex> lock(_surgAct->_errorMutex);
+			_surgAct->taskThreadErrorStr = "Couldn't create the initial physics lattice. Probable model error.";
+		}
 	}
 }
 

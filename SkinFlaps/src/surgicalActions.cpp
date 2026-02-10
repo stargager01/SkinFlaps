@@ -4,6 +4,8 @@
 #include <sstream>
 #include <fstream>
 #include <exception>
+#include <stdexcept>
+#include <string>
 #include <chrono>
 #include <thread>
 #include <assert.h>
@@ -162,11 +164,23 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 						_bts.initPdPhysics();
 						physicsDone = true;
 					}
+					catch (const std::exception& e) {
+						physicsDone = true;
+						_ffg->physicsDrag = false;
+						taskThreadError = true;
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = std::string("Couldn't initialize physics after adding hook: ") + e.what();
+						}
+					}
 					catch (...) {
 						physicsDone = true;
 						_ffg->physicsDrag = false;
 						taskThreadError = true;
-						taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+						}
 					}
 					}
 				);
@@ -450,11 +464,23 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 				newTopology = true;
 				physicsDone = true;
 			}
+			catch (const std::exception& e) {
+				physicsDone = true;
+				_ffg->physicsDrag = false;
+				taskThreadError = true;
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = std::string("Topological error following excision: ") + e.what();
+				}
+			}
 			catch (...) {
 				physicsDone = true;
 				_ffg->physicsDrag = false;
 				taskThreadError = true;
-				taskThreadErrorStr = "Topological error following excision.";
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = "Topological error following excision.";
+				}
 			}
 			}
 		);
@@ -677,11 +703,23 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 					_bts.initPdPhysics();
 					physicsDone = true;
 				}
+				catch (const std::exception& e) {
+					physicsDone = true;
+					_ffg->physicsDrag = false;
+					taskThreadError = true;
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = std::string("Couldn't initialize physics after adding hook: ") + e.what();
+					}
+				}
 				catch (...) {
 					physicsDone = true;
 					_ffg->physicsDrag = false;
 					taskThreadError = true;
-					taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+					}
 				}
 				}
 			);
@@ -708,11 +746,23 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 						_sutures.laySutureLine(i);
 						physicsDone = true;
 					}
+					catch (const std::exception& e) {
+						physicsDone = true;
+						_ffg->physicsDrag = false;
+						taskThreadError = true;
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = std::string("Error in placing a linked suture line: ") + e.what();
+						}
+					}
 					catch (...) {
 						physicsDone = true;
 						_ffg->physicsDrag = false;
 						taskThreadError = true;
-						taskThreadErrorStr = "Error in placing a linked suture line";
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = "Error in placing a linked suture line";
+						}
 					}
 					}
 				);
@@ -724,7 +774,7 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 			return false;
 		}
 		else
-			assert(false);
+			throw(std::logic_error("Unexpected state in rightMouseUp: setSecondEdge returned unexpected value"));
 		_bts.setPhysicsPause(false);
 
 		if (_historyIt != _historyArray.end()) {
@@ -998,11 +1048,23 @@ void surgicalActions::onKeyDown(int key)
 					newTopology = true;
 					physicsDone = true;
 				}
+				catch (const std::exception& e) {
+					physicsDone = true;
+					_ffg->physicsDrag = false;
+					taskThreadError = true;
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = std::string("Periosteal undermine error: ") + e.what();
+					}
+				}
 				catch (...) {
 					physicsDone = true;
 					_ffg->physicsDrag = false;
 					taskThreadError = true;
-					taskThreadErrorStr = "Periosteal undermine error.";
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = "Periosteal undermine error.";
+					}
 				}
 				}
 			);
@@ -1116,10 +1178,22 @@ void surgicalActions::onKeyDown(int key)
 								newTopology = true;
 								physicsDone = true;
 							}
+							catch (const std::exception& e) {
+								physicsDone = true;
+								_ffg->physicsDrag = false;
+								{
+									std::lock_guard<std::mutex> lock(_errorMutex);
+									taskThreadErrorStr = std::string("An incision requiring physics recut failed: ") + e.what();
+								}
+								taskThreadError = true;
+							}
 							catch (...) {
 								physicsDone = true;
 								_ffg->physicsDrag = false;
-								taskThreadErrorStr = "An incision requiring physics recut failed.";
+								{
+									std::lock_guard<std::mutex> lock(_errorMutex);
+									taskThreadErrorStr = "An incision requiring physics recut failed.";
+								}
 								taskThreadError = true;
 							}
 							}
@@ -1184,10 +1258,22 @@ void surgicalActions::onKeyDown(int key)
 					newTopology = true;
 					physicsDone = true;
 				}
+				catch (const std::exception& e) {
+					physicsDone = true;
+					_ffg->physicsDrag = false;
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = std::string("Topology error after undermine operation: ") + e.what();
+					}
+					taskThreadError = true;
+				}
 				catch (...) {
 					physicsDone = true;
 					_ffg->physicsDrag = false;
-					taskThreadErrorStr = "Topology error after undermine operation.";
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = "Topology error after undermine operation.";
+					}
 					taskThreadError = true;
 				}
 				}
@@ -1269,10 +1355,22 @@ void surgicalActions::onKeyDown(int key)
 					newTopology = true;
 					physicsDone = true;
 				}
+				catch (const std::exception& e) {
+					physicsDone = true;
+					_ffg->physicsDrag = false;
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = std::string("Deep cut failure: ") + e.what();
+					}
+					taskThreadError = true;
+				}
 				catch (...) {
 					physicsDone = true;
 					_ffg->physicsDrag = false;
-					taskThreadErrorStr = "Deep cut failure.";
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = "Deep cut failure.";
+					}
 					taskThreadError = true;
 				}
 				}
@@ -1675,7 +1773,10 @@ bool surgicalActions::getHistoryAttachPoint(const int material, const float(&his
 	float d = N * startV, dsqFinal = displacement.length2();
 	int nextTri = k;
 	int lastEdge = -1;
+	int _loopGuard = 0;
 	do {
+		if (++_loopGuard > 10000)
+			throw(std::runtime_error("Iteration limit exceeded in surgicalActions::getHistoryAttachPoint()."));
 		tr = mtp->triangleVertices(nextTri);
 		Vec3f now, nextV;  // last, 
 		vbt->vertexGridLocus(tr[0], nextV);
@@ -1880,11 +1981,23 @@ void surgicalActions::nextHistoryAction()
 						_bts.initPdPhysics();
 						physicsDone = true;
 					}
+					catch (const std::exception& e) {
+						physicsDone = true;
+						_ffg->physicsDrag = false;
+						taskThreadError = true;
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = std::string("Couldn't initialize physics after adding hook: ") + e.what();
+						}
+					}
 					catch (...) {
 						physicsDone = true;
 						_ffg->physicsDrag = false;
 						taskThreadError = true;
-						taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+						}
 					}
 					}
 				);
@@ -1995,10 +2108,22 @@ void surgicalActions::nextHistoryAction()
 						newTopology = true;
 						physicsDone = true;
 					}
+					catch (const std::exception& e) {
+						physicsDone = true;
+						_ffg->physicsDrag = false;
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = std::string("Couldn't update physics after incision requiring recut: ") + e.what();
+						}
+						taskThreadError = true;
+					}
 					catch (...) {
 						physicsDone = true;
 						_ffg->physicsDrag = false;
-						taskThreadErrorStr = "Couldn't update physics after incision requiring recut.";
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = "Couldn't update physics after incision requiring recut.";
+						}
 						taskThreadError = true;
 					}
 					}
@@ -2052,10 +2177,22 @@ void surgicalActions::nextHistoryAction()
 				newTopology = true;
 				physicsDone = true;
 			}
+			catch (const std::exception& e) {
+				physicsDone = true;
+				_ffg->physicsDrag = false;
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = std::string("Topology error following an undermine: ") + e.what();
+				}
+				taskThreadError = true;
+			}
 			catch (...) {
 				physicsDone = true;
 				_ffg->physicsDrag = false;
-				taskThreadErrorStr = "Topology error following an undermine.";
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = "Topology error following an undermine.";
+				}
 				taskThreadError = true;
 			}
 			}
@@ -2094,10 +2231,22 @@ void surgicalActions::nextHistoryAction()
 				newTopology = true;
 				physicsDone = true;
 			}
+			catch (const std::exception& e) {
+				physicsDone = true;
+				_ffg->physicsDrag = false;
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = std::string("Topology error found after excision: ") + e.what();
+				}
+				taskThreadError = true;
+			}
 			catch (...) {
 				physicsDone = true;
 				_ffg->physicsDrag = false;
-				taskThreadErrorStr = "Topology error found after excision.";
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = "Topology error found after excision.";
+				}
 				taskThreadError = true;
 			}
 			}
@@ -2153,7 +2302,7 @@ void surgicalActions::nextHistoryAction()
 				param = uv[1];
 			}
 			else
-				assert(false);
+				throw(std::logic_error("Unexpected state in nextHistoryAction: first suture vertex UV coordinates don't map to any edge"));
 		}
 		else {
 			if (uv[0] + uv[1] > 0.67f) {  // force to an edge
@@ -2204,7 +2353,7 @@ void surgicalActions::nextHistoryAction()
 				param = uv[1];
 			}
 			else
-				assert(false);
+				throw(std::logic_error("Unexpected state in nextHistoryAction: second suture vertex UV coordinates don't map to any edge"));
 		}
 		else {
 			if (uv[0] + uv[1] > 0.67f) {  // force to an edge
@@ -2232,11 +2381,23 @@ void surgicalActions::nextHistoryAction()
 					_bts.initPdPhysics();
 					physicsDone = true;
 				}
+				catch (const std::exception& e) {
+					physicsDone = true;
+					_ffg->physicsDrag = false;
+					taskThreadError = true;
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = std::string("Couldn't initialize physics after adding hook: ") + e.what();
+					}
+				}
 				catch (...) {
 					physicsDone = true;
 					_ffg->physicsDrag = false;
 					taskThreadError = true;
-					taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+					{
+						std::lock_guard<std::mutex> lock(_errorMutex);
+						taskThreadErrorStr = "Couldn't initialize physics after adding hook.";
+					}
 				}
 				}
 			);
@@ -2251,7 +2412,7 @@ void surgicalActions::nextHistoryAction()
 			return;
 		}
 		else
-			assert(false);
+			throw(std::logic_error("Unexpected state in nextHistoryAction: setSecondEdge returned unexpected value"));
 		if(_sutures.isLinked(sn)){
 			physicsDone = false;
 			_ffg->physicsDrag = true;
@@ -2374,7 +2535,10 @@ void surgicalActions::nextHistoryAction()
 		_bts.updateSurfaceDraw();
 		if (!_incisions.cutDeep()) {
 			taskThreadError = true;
-			taskThreadErrorStr = "Attempted deep cut failed.";
+			{
+				std::lock_guard<std::mutex> lock(_errorMutex);
+				taskThreadErrorStr = "Attempted deep cut failed.";
+			}
 		}
 
 		physicsDone = false;
@@ -2385,11 +2549,23 @@ void surgicalActions::nextHistoryAction()
 				newTopology = true;
 				physicsDone = true;
 			}
+			catch (const std::exception& e) {
+				physicsDone = true;
+				_ffg->physicsDrag = false;
+				taskThreadError = true;
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = std::string("Topology error found after deepCut: ") + e.what();
+				}
+			}
 			catch (...) {
 				physicsDone = true;
 				_ffg->physicsDrag = false;
 				taskThreadError = true;
-				taskThreadErrorStr = "Topology error found after deepCut.";
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = "Topology error found after deepCut.";
+				}
 			}
 			}
 		);
@@ -2436,11 +2612,23 @@ void surgicalActions::nextHistoryAction()
 				newTopology = true;
 				physicsDone = true;
 			}
+			catch (const std::exception& e) {
+				physicsDone = true;
+				_ffg->physicsDrag = false;
+				taskThreadError = true;
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = std::string("Error occurred after a periosteal undermine: ") + e.what();
+				}
+			}
 			catch (...) {
 				physicsDone = true;
 				_ffg->physicsDrag = false;
 				taskThreadError = true;
-				taskThreadErrorStr = "Error occurred after a periosteal undermine";
+				{
+					std::lock_guard<std::mutex> lock(_errorMutex);
+					taskThreadErrorStr = "Error occurred after a periosteal undermine";
+				}
 			}
 			}
 		);
