@@ -25,7 +25,7 @@
 // forward declarations
 class vnBccTetrahedra;
 class fence;
-class FacialFlapsGui;
+class SurgicalSimGui;
 struct rayTriangleIntersect;
 
 /** @brief Full-thickness incision tool that cuts through the BCC tet lattice.
@@ -50,7 +50,7 @@ public:
 	float getCutSpacingInv() const { return _cutSpacingInv; }
 
 	/// @brief Validate and correct a fence path before using it as a cut guide.
-	bool inputCorrectFence(fence* fp, FacialFlapsGui* ffg);
+	bool inputCorrectFence(fence* fp, SurgicalSimGui* ffg);
 	/** @brief Add a deep incision post at a surface triangle location.
 	 *  @param triangle    Triangle index on the skin surface.
 	 *  @param uv          Parametric coordinates on the triangle.

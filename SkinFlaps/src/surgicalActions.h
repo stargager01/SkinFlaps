@@ -18,7 +18,7 @@
 #include "bccTetScene.h"
 
 // forward declarations
-class FacialFlapsGui;
+class SurgicalSimGui;
 class gl3wGraphics;
 
 /** @brief Central controller for all surgical tool interactions in the simulator.
@@ -49,7 +49,7 @@ public:
 	/// @brief Assign the OpenGL graphics context to this controller and the scene.
 	inline void setGl3wGraphics(gl3wGraphics *gl3w) { _gl3w = gl3w; _bts.setGl3wGraphics(gl3w); }
 	/// @brief Assign the GUI interface for user dialogs and status updates.
-	void setFacialFlapsGui(FacialFlapsGui *ffg) { _ffg = ffg; }
+	void setSurgicalSimGui(SurgicalSimGui *ffg) { _ffg = ffg; }
 	/// @brief Return a pointer to the hooks manager.
 	inline hooks* getHooks() { return &_hooks; }
 	/// @brief Return a pointer to the sutures manager.
@@ -117,7 +117,7 @@ private:
     struct float3{	float v[3]; };
 	int _toolState;
 	gl3wGraphics *_gl3w;
-	FacialFlapsGui *_ffg;
+	SurgicalSimGui *_ffg;
 	std::vector<int> _pXToPbTetVertices;
 	int _originalTriangleNumber;
 	int _dragVertex;

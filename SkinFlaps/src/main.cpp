@@ -12,7 +12,7 @@
 #include <gl3wGraphics.h>
 #include "FacialFlapsGui.h"
 
-FacialFlapsGui ffg;
+SurgicalSimGui ffg;
 
 int main(int, char**)
 {
@@ -20,7 +20,7 @@ int main(int, char**)
 		puts("Failed to open Glfw window.\n");
 		return 1;
 	}
-	if (!ffg.initCleftSim()) {
+	if (!ffg.initSimulator()) {
 		puts("Failed to initialize cleft simulator.\n");
 		return 1;
 	}
@@ -41,7 +41,7 @@ int main(int, char**)
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
-			if (FacialFlapsGui::physicsDrag)
+			if (SurgicalSimGui::physicsDrag)
 				ffg.showHourglass();
 			ffg.InstanceCleftGui();
 

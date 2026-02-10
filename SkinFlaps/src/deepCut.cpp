@@ -1167,7 +1167,7 @@ int deepCut::preventPreviousCrossover(const int postNum) {
 	return 0;
 }
 
-bool deepCut::inputCorrectFence(fence* fp, FacialFlapsGui* ffg) {
+bool deepCut::inputCorrectFence(fence* fp, SurgicalSimGui* ffg) {
 	// interactive deep cut builder.  On successful exit deep posts have interpost connections set up.
 	_deepPosts.clear();
 	if (fp->numberOfPosts() < 2) {

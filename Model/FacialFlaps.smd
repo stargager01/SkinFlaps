@@ -57,7 +57,7 @@
           "highTetWeight" : 5000.0
         }
     },
-    "facialRegions" : {
+    "tissueRegions" : {
         "cheek" : {
             "minStrain" : 0.5,
             "maxStrain" : 2.0
@@ -86,6 +86,17 @@
             "minStrain" : 0.6,
             "maxStrain" : 1.6
         }
+    },
+    "materialLayers" : {
+        "boundary" : 1,
+        "skinSurface" : 2,
+        "incisionEdge" : 3,
+        "subcutaneous" : 4,
+        "deepBed" : 5,
+        "muscle" : 6,
+        "periosteum" : 7,
+        "periosteumUndermined" : 8,
+        "undermineMarker" : 10
     },
     "fixedCollisionSets" : {
         "eye_right_CBC.obj" : [

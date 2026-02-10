@@ -477,7 +477,7 @@ SkinFlaps/
 main.cpp
   |
   v
-FacialFlapsGui  ------>  gl3wGraphics (rendering)
+SurgicalSimGui  ------>  gl3wGraphics (rendering)
   |                          |
   v                          v
 surgicalActions          materialTriangles (mesh data)
@@ -504,7 +504,7 @@ simd-numeric-kernels (AVX-optimized operations)
 ```
 
 The main loop in `main.cpp` alternates between:
-1. **GUI frame**: ImGui rendering via `FacialFlapsGui::InstanceCleftGui()`
+1. **GUI frame**: ImGui rendering via `SurgicalSimGui::InstanceCleftGui()`
 2. **Physics update**: dispatched asynchronously to a TBB task arena via
    `bccTetScene::updatePhysics()`
 3. **Graphics draw**: `gl3wGraphics::drawAll()` renders the surface mesh,
@@ -564,7 +564,7 @@ The following conventions are observed throughout the existing codebase:
 **Naming:**
 - Class names: `camelCase` starting lowercase (e.g., `deepCut`, `bccTetScene`,
   `surgicalActions`). Some classes start uppercase when they are acronym-heavy
-  (e.g., `FacialFlapsGui`, `GLmatrices`).
+  (e.g., `SurgicalSimGui`, `GLmatrices`).
 - Member variables: prefixed with underscore `_` (e.g., `_deepPosts`,
   `_diagnosticLog`, `_mt`).
 - Methods: `camelCase` starting lowercase (e.g., `cutDeep()`, `loadScene()`,
@@ -593,7 +593,7 @@ The following conventions are observed throughout the existing codebase:
 - `std::logic_error` and `std::runtime_error` are thrown for unrecoverable
   errors.
 - The main loop catches all exception types and routes them through
-  `FacialFlapsGui::handleThrow()` for user display.
+  `SurgicalSimGui::handleThrow()` for user display.
 - Atomic flags (`physicsDone`, `newTopology`, `taskThreadError`) coordinate
   between the GUI thread and the TBB physics thread.
 
@@ -654,7 +654,7 @@ leading up to the failure.
    - Wire up the `rightMouseDown()`, `rightMouseUp()`, `mouseMotion()`,
      `onKeyDown()` dispatch based on `_toolState`.
 
-3. **Add a GUI button** in `FacialFlapsGui::InstanceCleftGui()` that sets the
+3. **Add a GUI button** in `SurgicalSimGui::InstanceCleftGui()` that sets the
    tool state via `setToolState()`. Look at how existing tools are toggled.
 
 4. **Register the tool** in the history system:
@@ -683,7 +683,7 @@ Physics parameters are configured at several levels:
   bts->setRegionStretchLimit("scalp", 0.9f, 1.15f);
 
   // Or set full properties including stiffness weights
-  facialRegionProperties props("eyelid", 0.6f, 2.0f, 0.5f, 1.0f, "eyelidRegion.obj");
+  tissueRegionProperties props("eyelid", 0.6f, 2.0f, 0.5f, 1.0f, "eyelidRegion.obj");
   bts->setRegionProperties(props);
 
   // Or get clinically-informed defaults
@@ -704,7 +704,7 @@ Physics parameters are configured at several levels:
   deep cut interior point spacing. Default is 15.0. Higher values give finer
   cuts but are more expensive.
 
-- **Low tet weight**: Controlled per-region via `facialRegionProperties` or
+- **Low tet weight**: Controlled per-region via `tissueRegionProperties` or
   globally through the `.smd` file. Affects stiffness of the low-resolution
   multiresolution tets.
 

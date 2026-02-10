@@ -287,6 +287,26 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		// No tissueRegions section in scene file - load clinically-informed defaults.
 		_regionProperties = getDefaultRegionProperties();
 	}
+	// Parse optional "materialLayers" section for configurable tissue layer ID mapping.
+	// If absent, the materialLayerConfig defaults (matching the hardcoded facial tissue IDs)
+	// are used. This allows non-facial anatomies to define their own layer semantics.
+	if ((oit = scnObj.find("materialLayers")) != scnObj.end()) {
+		json::Object mlObj = oit->second.ToObject();
+		if (mlObj.HasKey("boundary")) _materialLayers.boundary = mlObj["boundary"].ToInt();
+		if (mlObj.HasKey("skinSurface")) _materialLayers.skinSurface = mlObj["skinSurface"].ToInt();
+		if (mlObj.HasKey("incisionEdge")) _materialLayers.incisionEdge = mlObj["incisionEdge"].ToInt();
+		if (mlObj.HasKey("subcutaneous")) _materialLayers.subcutaneous = mlObj["subcutaneous"].ToInt();
+		if (mlObj.HasKey("deepBed")) _materialLayers.deepBed = mlObj["deepBed"].ToInt();
+		if (mlObj.HasKey("muscle")) _materialLayers.muscle = mlObj["muscle"].ToInt();
+		if (mlObj.HasKey("periosteum")) _materialLayers.periosteum = mlObj["periosteum"].ToInt();
+		if (mlObj.HasKey("periosteumUndermined")) _materialLayers.periosteumUndermined = mlObj["periosteumUndermined"].ToInt();
+		if (mlObj.HasKey("undermineMarker")) _materialLayers.undermineMarker = mlObj["undermineMarker"].ToInt();
+		// Extension fields for non-facial anatomies
+		if (mlObj.HasKey("tendon")) _materialLayers.tendon = mlObj["tendon"].ToInt();
+		if (mlObj.HasKey("jointCapsule")) _materialLayers.jointCapsule = mlObj["jointCapsule"].ToInt();
+		if (mlObj.HasKey("boneSurface")) _materialLayers.boneSurface = mlObj["boneSurface"].ToInt();
+		if (mlObj.HasKey("arthroscopicPortal")) _materialLayers.arthroscopicPortal = mlObj["arthroscopicPortal"].ToInt();
+	}
 	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // now creating operable lattice on load
 	_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
 	if (!_surgAct->getDeepCutPtr()->setDeepBed(_mt, deepBedFilepath.c_str(), &_vnTets)){
@@ -610,6 +630,11 @@ bccTetScene::bccTetScene() : _physicsPaused(false), _forcesApplied(false), _tets
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::vector<tissueRegionProperties> bccTetScene::getDefaultRegionProperties() {
+	// NOTE: These are the default facial regions for the cleft lip/palate model.
+	// For other anatomies (e.g. shoulder, torso), region properties should be
+	// loaded from the "tissueRegions" section of the .smd scene file instead
+	// of relying on these hardcoded defaults.
+	//
 	// Clinically-informed default stretch properties for common facial regions.
 	// These values reflect known differences in skin extensibility across the face:
 	//

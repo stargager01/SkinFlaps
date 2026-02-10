@@ -3,8 +3,8 @@
 // Purpose: New gui for cleftSim app using GLFW3, dear imgui and nativeFileDialog
 // Copyright 2020 - All rights reserved at this time.
 
-#ifndef _FACIAL_FLAPS_GUI_
-#define _FACIAL_FLAPS_GUI_
+#ifndef _SURGICAL_SIM_GUI_
+#define _SURGICAL_SIM_GUI_
 
 #ifdef WIN32
 #include <direct.h>
@@ -28,7 +28,7 @@
 #include <gl3wGraphics.h>
 #include "surgicalActions.h"
 
-class FacialFlapsGui {
+class SurgicalSimGui {
 public:
 	static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 
@@ -58,7 +58,7 @@ public:
 
 	static void destroyImguiGlfw();
 
-	static bool initCleftSim();
+	static bool initSimulator();
 
 	static bool initImguiGlfw();
 
@@ -91,13 +91,13 @@ public:
 
 	static void InstanceCleftGui();
 
-	FacialFlapsGui(){
-		igSurgAct.setFacialFlapsGui(this);
+	SurgicalSimGui(){
+		igSurgAct.setSurgicalSimGui(this);
 		user_message_flag = false;
 		getTextInput = false;
 	}
 
-	~FacialFlapsGui(){}
+	~SurgicalSimGui(){}
 
 	static GLFWwindow* FFwindow;
 	static int nextCounter;
@@ -118,6 +118,6 @@ private:
 	static surgicalActions igSurgAct;
 	static gl3wGraphics igGl3w;
 
-};  // class FacialFlapsGui
+};  // class SurgicalSimGui
 
-#endif  // #ifndef _FACIAL_FLAPS_GUI_
+#endif  // #ifndef _SURGICAL_SIM_GUI_

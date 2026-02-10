@@ -73,7 +73,7 @@
 ### Core Class Hierarchy
 
 ```
-FacialFlapsGui (Main UI Container - imgui-based)
+SurgicalSimGui (Main UI Container - imgui-based)
   |
   +-- surgicalActions (Surgical operation handler & UI callbacks)
   |     |

@@ -627,7 +627,8 @@ The file is a **JSON object** with the following sections (keys):
   "textureFiles":          { ... },
   "tetrahedralProperties": { ... },
   "tetrahedralSubsets":    { ... },
-  "facialRegions":         { ... },
+  "tissueRegions":         { ... },
+  "materialLayers":        { ... },
   "fixedCollisionSets":    { ... }
 }
 ```
@@ -808,7 +809,7 @@ overrides a subset of `tetrahedralProperties`:
 
 ---
 
-### `facialRegions`
+### `tissueRegions`
 
 Defines named anatomical regions of the face with region-specific stretch
 limits. This section was added to allow different areas of the face (cheek,
@@ -830,7 +831,7 @@ specifies the regional properties:
 | `subsetObj` | String | No | `.obj` filename of a closed manifold defining the spatial extent. If absent, region is identified by name only. |
 
 ```json
-"facialRegions": {
+"tissueRegions": {
     "cheek": {
         "minStrain": 0.5,
         "maxStrain": 2.0
@@ -865,7 +866,7 @@ specifies the regional properties:
 **With a spatial-extent OBJ:**
 
 ```json
-"facialRegions": {
+"tissueRegions": {
     "cheek": {
         "minStrain": 0.6,
         "maxStrain": 2.0,
@@ -877,6 +878,72 @@ specifies the regional properties:
         "lowTetWeight": 800,
         "highTetWeight": 1800
     }
+}
+```
+
+---
+
+### `materialLayers`
+
+Maps semantic tissue layer names to integer material IDs used internally by the
+simulator. This section allows different anatomies (face, shoulder, etc.) to
+define their own tissue layer semantics without modifying C++ source code.
+
+If this section is absent, the simulator uses hardcoded defaults that match the
+facial tissue model (see Material ID Reference below).
+
+**Structure:** Object with the following fields:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `boundary` | Integer | No | 1 | Blank/peripheral boundary. |
+| `skinSurface` | Integer | No | 2 | Top skin surface (textured). |
+| `incisionEdge` | Integer | No | 3 | Incised skin edge (procedural dermis/fat). |
+| `subcutaneous` | Integer | No | 4 | Flap bottom / subcutaneous layer. |
+| `deepBed` | Integer | No | 5 | Deep tissue bed surface. |
+| `muscle` | Integer | No | 6 | Deep cut muscle layer. |
+| `periosteum` | Integer | No | 7 | Periosteum / bone surface, not undermined. |
+| `periosteumUndermined` | Integer | No | 8 | Periosteum, undermined. |
+| `undermineMarker` | Integer | No | 10 | Visual marker for undermined tissue. |
+| `tendon` | Integer | No | -1 | Tendon layer (non-facial extension). |
+| `jointCapsule` | Integer | No | -1 | Joint capsule / labrum (non-facial extension). |
+| `boneSurface` | Integer | No | -1 | Bone surface (non-facial extension). |
+| `arthroscopicPortal` | Integer | No | -1 | Arthroscopic entry portal (non-facial extension). |
+
+Fields with a default of -1 are extension slots for non-facial anatomies and
+are not used in the facial model. Only include the fields that differ from the
+defaults.
+
+**Facial model (explicit defaults):**
+
+```json
+"materialLayers": {
+    "boundary": 1,
+    "skinSurface": 2,
+    "incisionEdge": 3,
+    "subcutaneous": 4,
+    "deepBed": 5,
+    "muscle": 6,
+    "periosteum": 7,
+    "periosteumUndermined": 8,
+    "undermineMarker": 10
+}
+```
+
+**Hypothetical shoulder model (with extensions):**
+
+```json
+"materialLayers": {
+    "boundary": 1,
+    "skinSurface": 2,
+    "incisionEdge": 3,
+    "subcutaneous": 4,
+    "deepBed": 5,
+    "muscle": 6,
+    "tendon": 7,
+    "jointCapsule": 8,
+    "boneSurface": 9,
+    "arthroscopicPortal": 10
 }
 ```
 

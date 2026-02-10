@@ -41,22 +41,22 @@ using namespace gl;
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
 
-bool FacialFlapsGui::powerHooks = false, FacialFlapsGui::showToolbox = true, FacialFlapsGui::viewPhysics = false, FacialFlapsGui::viewSurface = true,
-	FacialFlapsGui::wheelZoom = true, FacialFlapsGui::user_message_flag = false, FacialFlapsGui::except_thrown_flag = false, FacialFlapsGui::getTextInput = false;
-int FacialFlapsGui::nextCounter = 0;
-int FacialFlapsGui::csgToolstate, FacialFlapsGui::FileDlgMode = 0;
-std::string FacialFlapsGui::modelDirectory, FacialFlapsGui::historyDirectory, FacialFlapsGui::objDirectory, FacialFlapsGui::modelFile, FacialFlapsGui::historyFile, FacialFlapsGui::user_message, FacialFlapsGui::user_message_title;
-// std::string FacialFlapsGui::loadDir, FacialFlapsGui::loadFile;
-GLFWwindow* FacialFlapsGui::FFwindow;
-unsigned char FacialFlapsGui::buttonsDown;
-bool FacialFlapsGui::surgicalDrag, FacialFlapsGui::ctrlShiftKeyDown = false, FacialFlapsGui::physicsDrag = false;
-int FacialFlapsGui::windowWidth, FacialFlapsGui::windowHeight;
-ImVec2 FacialFlapsGui::minFileDlgSize;
-GLuint FacialFlapsGui::hourglassTexture = 0xffffffff;
-int FacialFlapsGui::hourglassWidth, FacialFlapsGui::hourglassHeight;
-float FacialFlapsGui::lastSurgX, FacialFlapsGui::lastSurgY;
-surgicalActions FacialFlapsGui::igSurgAct;
-gl3wGraphics FacialFlapsGui::igGl3w;
+bool SurgicalSimGui::powerHooks = false, SurgicalSimGui::showToolbox = true, SurgicalSimGui::viewPhysics = false, SurgicalSimGui::viewSurface = true,
+	SurgicalSimGui::wheelZoom = true, SurgicalSimGui::user_message_flag = false, SurgicalSimGui::except_thrown_flag = false, SurgicalSimGui::getTextInput = false;
+int SurgicalSimGui::nextCounter = 0;
+int SurgicalSimGui::csgToolstate, SurgicalSimGui::FileDlgMode = 0;
+std::string SurgicalSimGui::modelDirectory, SurgicalSimGui::historyDirectory, SurgicalSimGui::objDirectory, SurgicalSimGui::modelFile, SurgicalSimGui::historyFile, SurgicalSimGui::user_message, SurgicalSimGui::user_message_title;
+// std::string SurgicalSimGui::loadDir, SurgicalSimGui::loadFile;
+GLFWwindow* SurgicalSimGui::FFwindow;
+unsigned char SurgicalSimGui::buttonsDown;
+bool SurgicalSimGui::surgicalDrag, SurgicalSimGui::ctrlShiftKeyDown = false, SurgicalSimGui::physicsDrag = false;
+int SurgicalSimGui::windowWidth, SurgicalSimGui::windowHeight;
+ImVec2 SurgicalSimGui::minFileDlgSize;
+GLuint SurgicalSimGui::hourglassTexture = 0xffffffff;
+int SurgicalSimGui::hourglassWidth, SurgicalSimGui::hourglassHeight;
+float SurgicalSimGui::lastSurgX, SurgicalSimGui::lastSurgY;
+surgicalActions SurgicalSimGui::igSurgAct;
+gl3wGraphics SurgicalSimGui::igGl3w;
 
 static ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int key)
 {
@@ -171,7 +171,7 @@ static ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int key)
 	}
 }
 
-void FacialFlapsGui::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+void SurgicalSimGui::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
@@ -231,7 +231,7 @@ void FacialFlapsGui::mouse_button_callback(GLFWwindow* window, int button, int a
 	}
 }
 
-void FacialFlapsGui::cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
+void SurgicalSimGui::cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
 {
 	// (1) ALWAYS forward mouse data to ImGui! This is automatic with default backends. With your own backend:
 	ImGuiIO& io = ImGui::GetIO();
@@ -262,7 +262,7 @@ void FacialFlapsGui::cursor_position_callback(GLFWwindow* window, double xpos, d
 	}
 }
 
-void FacialFlapsGui::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void SurgicalSimGui::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureKeyboard) {
@@ -291,7 +291,7 @@ void FacialFlapsGui::key_callback(GLFWwindow* window, int key, int scancode, int
 		;
 }
 
-void FacialFlapsGui::destroyImguiGlfw() {
+void SurgicalSimGui::destroyImguiGlfw() {
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
@@ -299,7 +299,7 @@ void FacialFlapsGui::destroyImguiGlfw() {
 	glfwTerminate();
 }
 
-bool FacialFlapsGui::initCleftSim() {
+bool SurgicalSimGui::initSimulator() {
 	csgToolstate = 0;
 	igGl3w.initializeGraphics();
 	igSurgAct.setGl3wGraphics(&igGl3w);
@@ -315,7 +315,7 @@ bool FacialFlapsGui::initCleftSim() {
 	return true;
 }
 
-bool FacialFlapsGui::initImguiGlfw() {
+bool SurgicalSimGui::initImguiGlfw() {
 	// Setup window
 	glfwSetErrorCallback(&glfw_error_callback);
 	if (!glfwInit())
@@ -402,7 +402,7 @@ bool FacialFlapsGui::initImguiGlfw() {
 	return true;
 }
 
-void FacialFlapsGui::getFileName(const char *startPath, const char *fileFilterSuffix, std::string &startDirectory, bool mustExist, bool chooseDirectory){
+void SurgicalSimGui::getFileName(const char *startPath, const char *fileFilterSuffix, std::string &startDirectory, bool mustExist, bool chooseDirectory){
 	// "smd" is a module file and "hst" is a history file
 	std::string suffix(fileFilterSuffix), dialogTitle;
 	int flags = 0;
@@ -436,7 +436,7 @@ void FacialFlapsGui::getFileName(const char *startPath, const char *fileFilterSu
 	ImGuiFileDialog::Instance()->OpenDialog("FileDialogKey", dialogTitle.c_str(), suffix.c_str(), startDirectory.c_str(), "", 1, nullptr, flags);
 }
 
-void FacialFlapsGui::handleThrow(const char* message) {
+void SurgicalSimGui::handleThrow(const char* message) {
 	user_message = message;
 	std::string errHist = historyDirectory + "ERROR.hst";
 	igSurgAct.saveSurgicalHistory(errHist.c_str());
@@ -446,7 +446,7 @@ void FacialFlapsGui::handleThrow(const char* message) {
 	except_thrown_flag = true;
 }
 
-void FacialFlapsGui::showHourglass() {
+void SurgicalSimGui::showHourglass() {
 	// from: https ://github.com/ocornut/imgui/wiki/Image-Loading-and-Displaying-Examples#Example-for-OpenGL-users
 	physicsDrag = true;
 	if (hourglassTexture > 0xfffffffe) {
@@ -488,7 +488,7 @@ void FacialFlapsGui::showHourglass() {
 	}
 }
 
-std::wstring FacialFlapsGui::RegGetString(HKEY hKey, const std::wstring& subKey, const std::wstring& value)
+std::wstring SurgicalSimGui::RegGetString(HKEY hKey, const std::wstring& subKey, const std::wstring& value)
 {
 	DWORD dataSize{};
 	// First call to get dataSize
@@ -532,7 +532,7 @@ std::wstring FacialFlapsGui::RegGetString(HKEY hKey, const std::wstring& subKey,
 	return data;
 }
 
-void FacialFlapsGui::setDefaultDirectories() {
+void SurgicalSimGui::setDefaultDirectories() {
 	if (historyDirectory.empty() || modelDirectory.empty()) {
 		char buff[200];
 		HKEY hKey = HKEY_LOCAL_MACHINE;
@@ -576,7 +576,7 @@ void FacialFlapsGui::setDefaultDirectories() {
 	}
 }
 
-void FacialFlapsGui::InstanceCleftGui()
+void SurgicalSimGui::InstanceCleftGui()
 {
 	if (getTextInput) {
 

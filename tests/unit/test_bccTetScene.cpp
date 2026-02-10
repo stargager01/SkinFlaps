@@ -568,7 +568,7 @@ TEST_F(SetRegionPropertiesTest, DoesNotDuplicateOnUpdate) {
 
 
 // ===========================================================================
-// TEST SUITE: FacialRegionProperties struct
+// TEST SUITE: TissueRegionProperties struct
 // Tests for the tissueRegionProperties struct itself.
 // ===========================================================================
 

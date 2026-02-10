@@ -102,7 +102,7 @@ Full replay of history files through the simulation engine requires:
    `loadSceneFile` must be present in the model directory.
 3. **Physics engine** -- TBB task arenas are used for asynchronous physics
    updates (Intel MKL, CUDA solvers).
-4. **ImGui GUI** -- The `FacialFlapsGui` class manages the GUI frame loop
+4. **ImGui GUI** -- The `SurgicalSimGui` class manages the GUI frame loop
    and must be initialized.
 
 ### Roadmap for Headless Replay
@@ -111,7 +111,7 @@ To enable full automated replay without a display:
 
 1. **EGL/OSMesa offscreen context** -- Replace GLFW window creation with an
    offscreen OpenGL context (EGL on Linux, OSMesa as fallback).
-2. **Stub GUI** -- Create a headless `FacialFlapsGui` that skips ImGui
+2. **Stub GUI** -- Create a headless `SurgicalSimGui` that skips ImGui
    rendering but still drives the action loop.
 3. **Deterministic physics** -- Pin TBB thread count and floating-point
    mode to ensure reproducible results across CI runs.
