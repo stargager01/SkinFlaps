@@ -48,7 +48,16 @@ public:
 	/// @brief Handle keyboard key release events.
 	void onKeyUp(int key);
 	/// @brief Set the active surgical tool (0=none/physics running, >0=specific tool).
-	inline void setToolState(int toolState){ _bts.setPhysicsPause(toolState < 1 ? false : true); _toolState = toolState; }
+	inline void setToolState(int toolState){
+		// Restore normal FOV when leaving arthroscope mode
+		if (_toolState == TOOL_ARTHROSCOPE && toolState != TOOL_ARTHROSCOPE && _gl3w) {
+			float zCenter, height, verticalAngle, screenAspect;
+			_gl3w->getGLmatrices()->getCameraData(zCenter, height, verticalAngle, screenAspect);
+			_gl3w->getGLmatrices()->setView(0.7f, screenAspect);
+			_arthroscopePortalIdx = -1;
+		}
+		_bts.setPhysicsPause(toolState < 1 ? false : true); _toolState = toolState;
+	}
 	/// @brief Return the currently active tool state identifier.
 	inline int getToolState() { return _toolState; }
 	/// @brief Assign the OpenGL graphics context to this controller and the scene.

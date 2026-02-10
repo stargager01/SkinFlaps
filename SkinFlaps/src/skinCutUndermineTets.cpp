@@ -1022,6 +1022,7 @@ bool skinCutUndermineTets::setDeepBed(materialTriangles *mt, const std::string &
 	std::ifstream istr(deepBedPath.c_str());
 	if (!istr.is_open()) {
 		istr.close();
+		_deepBed.clear();  // ensure empty so subsequent operations don't use stale data
 		return false;
 	}
 	_deepBed.clear();
@@ -1034,7 +1035,7 @@ bool skinCutUndermineTets::setDeepBed(materialTriangles *mt, const std::string &
 	{
 		int topVert;
 		istr.getline(s, 399);
-		sscanf(s, "%ld %f %f %f", &topVert, &dp.gridLocus.X, &dp.gridLocus.Y, &dp.gridLocus.Z);
+		sscanf(s, "%d %f %f %f", &topVert, &dp.gridLocus.X, &dp.gridLocus.Y, &dp.gridLocus.Z);
 		// deep point guaranteed to be inside tet grid
 		dp.gridLocus -= activeVnt->getMinimumCorner();
 		dp.gridLocus *= (float)activeVnt->_unitSpacingInv;

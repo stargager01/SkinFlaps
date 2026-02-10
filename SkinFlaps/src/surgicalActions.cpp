@@ -563,6 +563,183 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		}
 		_periostealUndermineTriangles.push_back(pt);
 	}
+	else if (_toolState == TOOL_SUTURE_ANCHOR) {  // suture anchor placement on bone surface
+		auto sn = _gl3w->getNodePtr(objectHit);
+		if (sn->getType() != sceneNode::nodeType::MATERIAL_TRIANGLES)
+			return false;
+		materialTriangles* tr = _sg.getMaterialTriangles();
+		int mat = tr->triangleMaterial(triangle);
+		// Anchor placement requires periosteum or bone-adjacent tissue (materials 7, 8, or 5)
+		if (mat != 5 && mat != 7 && mat != 8) {
+			sendUserMessage("Suture anchors can only be placed on periosteum or deep bed surface (bone-adjacent tissue). Try again-", "USER ERROR");
+			return true;
+		}
+		// Compute surface normal at the anchor position
+		Vec3f norm;
+		tr->getTriangleNormal(triangle, norm, true);
+		float uv[2] = { 0.0f, 0.0f };
+		tr->getBarycentricProjection(triangle, position, uv);
+		// Store the anchor in sutures system
+		int anchorIdx = _sutures.addAnchor(position, norm.xyz, -1);
+		// Create visual marker for the anchor (sphere at placement point)
+		if (_sutures.getAnchors().size() == 1) {
+			_sutures.setShapes(_gl3w->getShapes());
+			_sutures.setGLmatrices(_gl3w->getGLmatrices());
+		}
+		char aName[8];
+		sprintf(aName, "A_%d", anchorIdx);
+		auto sh = _gl3w->getShapes()->addShape(sceneNode::nodeType::SPHERE, aName);
+		GLfloat anchorColor[] = { 0.85f, 0.85f, 0.2f, 1.0f };  // gold color for anchors
+		sh->setColor(anchorColor);
+		GLfloat* mm = sh->getModelViewMatrix();
+		loadIdentity4x4(mm);
+		float anchorSize = sn->getRadius() * 0.025f;
+		scaleMatrix4x4(mm, anchorSize, anchorSize, anchorSize);
+		translateMatrix4x4(mm, position[0], position[1], position[2]);
+		// Record in history
+		if (_historyIt != _historyArray.end()) {
+			json::Array tarr;
+			for (json::Array::ValueVector::iterator it = _historyArray.begin(); it != _historyIt; ++it)
+				tarr.push_back(*it);
+			_historyArray.Clear();
+			_historyArray = tarr;
+		}
+		json::Object anchorObj, anchorTitle;
+		anchorObj["anchorIdx"] = anchorIdx;
+		anchorObj["material"] = mat;
+		int material;
+		float hTx[2];
+		Vec3f hVec;
+		if (setHistoryAttachPoint(triangle, uv, material, hTx, hVec)) {
+			json::Array vArr;
+			vArr.push_back(hTx[0]);
+			vArr.push_back(hTx[1]);
+			anchorObj["historyTexture"] = vArr;
+			vArr.Clear();
+			vArr.push_back(hVec[0]);
+			vArr.push_back(hVec[1]);
+			vArr.push_back(hVec[2]);
+			anchorObj["displacement"] = vArr;
+		}
+		json::Array normArr;
+		normArr.push_back(norm.xyz[0]);
+		normArr.push_back(norm.xyz[1]);
+		normArr.push_back(norm.xyz[2]);
+		anchorObj["normal"] = normArr;
+		anchorTitle["addAnchor"] = anchorObj;
+		_historyArray.push_back(anchorTitle);
+		_historyIt = _historyArray.end();
+		_hooks.selectHook(-1);
+		_sutures.selectSuture(-1);
+		_selectedSurgObject = "";
+		sendUserMessage("Suture anchor placed. Switch to Suture tool to attach threads-", "Anchor Placed");
+		_bts.setPhysicsPause(false);
+	}
+	else if (_toolState == TOOL_ARTHROSCOPE) {  // arthroscope camera mode
+		// Place the arthroscope viewpoint at the clicked position
+		auto sn = _gl3w->getNodePtr(objectHit);
+		if (sn->getType() != sceneNode::nodeType::MATERIAL_TRIANGLES)
+			return false;
+		materialTriangles* tr = _sg.getMaterialTriangles();
+		Vec3f norm;
+		tr->getTriangleNormal(triangle, norm, true);
+		// Store portal position and normal for camera offset
+		_arthroscopePortalIdx = triangle;
+		// Narrow field of view for arthroscopic visualization
+		float zCenter, height, verticalAngle, screenAspect;
+		_gl3w->getGLmatrices()->getCameraData(zCenter, height, verticalAngle, screenAspect);
+		// Set a narrow arthroscopic FOV (~30 degrees) and position camera near surface
+		_gl3w->getGLmatrices()->setView(0.35f, screenAspect);
+		sendUserMessage("Arthroscope placed. Press ESC or switch tool to exit scope view-", "Arthroscope Active");
+		_bts.setPhysicsPause(false);
+	}
+	else if (_toolState == TOOL_GRASPER) {  // tissue grasper mode
+		auto sn = _gl3w->getNodePtr(objectHit);
+		if (sn->getType() != sceneNode::nodeType::MATERIAL_TRIANGLES)
+			return false;
+		materialTriangles* tr = _sg.getMaterialTriangles();
+		float uv[2] = { 0.0f, 0.0f };
+		tr->getBarycentricProjection(triangle, position, uv);
+		// Grasper works like a strong hook on soft tissue
+		if (_hooks.getNumberOfHooks() < 1) {
+			_hooks.setHookSize(sn->getRadius() * 0.02f);
+			_hooks.setShapes(_gl3w->getShapes());
+			_hooks.setGLmatrices(_gl3w->getGLmatrices());
+			_hooks.setPhysicsLattice(_bts.getPdTetPhysics_2());
+			_hooks.setVnBccTetrahedra(_bts.getVirtualNodedBccTetrahedra());
+		}
+		bool savedStrongHooks = _strongHooks;
+		_strongHooks = true;  // grasper always uses strong hooks
+		hookNum = _hooks.addHook(tr, triangle, uv, _strongHooks);
+		_strongHooks = savedStrongHooks;
+		if (hookNum > -1) {
+			if (!_bts.getPdTetPhysics_2()->solverInitialized()) {
+				_bts.setForcesAppliedFlag();
+				physicsDone = false;
+				_ffg->physicsDrag = true;
+				tbb::task_arena(tbb::task_arena::attach()).enqueue([&]() {
+					try {
+						_bts.initPdPhysics();
+						physicsDone = true;
+					}
+					catch (const std::exception& e) {
+						physicsDone = true;
+						_ffg->physicsDrag = false;
+						taskThreadError = true;
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = std::string("Couldn't initialize physics after grasper placement: ") + e.what();
+						}
+					}
+					catch (...) {
+						physicsDone = true;
+						_ffg->physicsDrag = false;
+						taskThreadError = true;
+						{
+							std::lock_guard<std::mutex> lock(_errorMutex);
+							taskThreadErrorStr = "Couldn't initialize physics after grasper placement.";
+						}
+					}
+					}
+				);
+			}
+			_sutures.selectSuture(-1);
+			_hooks.selectHook(hookNum);
+			char s[80];
+			sprintf(s, "H_%d", hookNum);
+			_selectedSurgObject = s;
+			// Record grasper placement in history
+			int material;
+			float hTx[2];
+			Vec3f hVec;
+			if (setHistoryAttachPoint(triangle, uv, material, hTx, hVec)) {
+				if (_historyIt != _historyArray.end()) {
+					json::Array tarr;
+					for (json::Array::ValueVector::iterator it = _historyArray.begin(); it != _historyIt; ++it)
+						tarr.push_back(*it);
+					_historyArray.Clear();
+					_historyArray = tarr;
+				}
+				json::Object graspObj, graspTitle;
+				graspObj["hookNum"] = hookNum;
+				graspObj["material"] = material;
+				graspObj["strongHook"] = true;
+				json::Array vArr;
+				vArr.push_back(hTx[0]);
+				vArr.push_back(hTx[1]);
+				graspObj["historyTexture"] = vArr;
+				vArr.Clear();
+				vArr.push_back(hVec[0]);
+				vArr.push_back(hVec[1]);
+				vArr.push_back(hVec[2]);
+				graspObj["displacement"] = vArr;
+				graspTitle["addHook"] = graspObj;  // reuse hook history format for compatibility
+				_historyArray.push_back(graspTitle);
+				_historyIt = _historyArray.end();
+			}
+		}
+		_bts.setPhysicsPause(false);
+	}
 	else
 		;
 	return true;
@@ -2654,10 +2831,58 @@ void surgicalActions::nextHistoryAction()
 		++_historyIt;
 		return;  // don't setToolState(0) as will unpause physics
 	}
-	// Shoulder surgery history action types (stubs for Phase 4 integration):
-	// "anchorPlace"         - placing a suture anchor into bone
-	// "anchorSuture"        - connecting a suture from an anchor to soft tissue
-	// "arthroscopePosition" - positioning the arthroscope camera at a portal
+	else if (_historyIt->HasKey("addAnchor"))
+	{
+		json::Object anchorObj = (*_historyIt)["addAnchor"].ToObject();
+		materialTriangles* tr = _sg.getMaterialTriangles();
+		if (tr == NULL) {
+			++_historyIt;
+			return;
+		}
+		// Retrieve anchor placement position from history
+		float pos[3] = {0.0f, 0.0f, 0.0f};
+		float norm[3] = {0.0f, 0.0f, 1.0f};
+		if (anchorObj.HasKey("historyTexture") && anchorObj.HasKey("displacement")) {
+			float hTx[2], uv[2];
+			int tri;
+			int material = anchorObj["material"].ToInt();
+			json::Array pArr = anchorObj["historyTexture"].ToArray();
+			hTx[0] = pArr[0].ToFloat();
+			hTx[1] = pArr[1].ToFloat();
+			pArr.Clear();
+			pArr = anchorObj["displacement"].ToArray();
+			Vec3f hVec;
+			hVec[0] = pArr[0].ToFloat();
+			hVec[1] = pArr[1].ToFloat();
+			hVec[2] = pArr[2].ToFloat();
+			if (getHistoryAttachPoint(material, hTx, hVec, tri, uv, false)) {
+				tr->getBarycentricPosition(tri, uv, pos);
+			}
+		}
+		if (anchorObj.HasKey("normal")) {
+			json::Array nArr = anchorObj["normal"].ToArray();
+			norm[0] = nArr[0].ToFloat();
+			norm[1] = nArr[1].ToFloat();
+			norm[2] = nArr[2].ToFloat();
+		}
+		int aIdx = _sutures.addAnchor(pos, norm, -1);
+		// Create visual marker
+		if (_sutures.getAnchors().size() == 1) {
+			_sutures.setShapes(_gl3w->getShapes());
+			_sutures.setGLmatrices(_gl3w->getGLmatrices());
+		}
+		char aName[8];
+		sprintf(aName, "A_%d", aIdx);
+		auto sh = _gl3w->getShapes()->addShape(sceneNode::nodeType::SPHERE, aName);
+		GLfloat anchorColor[] = { 0.85f, 0.85f, 0.2f, 1.0f };
+		sh->setColor(anchorColor);
+		GLfloat* mm = sh->getModelViewMatrix();
+		loadIdentity4x4(mm);
+		float anchorSize = _sg.getSceneNode()->getRadius() * 0.025f;
+		scaleMatrix4x4(mm, anchorSize, anchorSize, anchorSize);
+		translateMatrix4x4(mm, pos[0], pos[1], pos[2]);
+		++_historyIt;
+	}
 	else
 		++_historyIt;
 	_ffg->setToolState(0);
