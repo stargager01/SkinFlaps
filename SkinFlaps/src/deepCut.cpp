@@ -1,4 +1,5 @@
 ﻿#include <assert.h>
+#include <iostream>
 #include "Vec2d.h"
 #include "Vec3f.h"
 #include "Mat3x3f.h"
@@ -31,6 +32,10 @@ float deepCut::_cutSpacingInv = 15.0f;  // inverse of deep cut interior point sp
 
 bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPosts
 {
+	if (_diagnosticLog)
+		std::cerr << "deepCut::cutDeep() entry, deepPosts count: " << _deepPosts.size()
+			<< ", frontClosed: " << (_deepPosts.empty() ? -1 : (int)_deepPosts.front().closedEnd)
+			<< ", backClosed: " << (_deepPosts.empty() ? -1 : (int)_deepPosts.back().closedEnd) << std::endl;
 	_previousSkinTopEnd = -1;
 	_loopSkinTopBegin = -1;
 	_endPlanes[0].P.X = DBL_MAX;
@@ -61,8 +66,12 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 		int i0 = rit->first.second + 1;
 		assert(i0 == 1);
 		++rit;
-		if (rit->first.first != post)
+		if (rit->first.first != post) {
+			if (_diagnosticLog)
+				std::cerr << "deepCut::cutDeep() topological connection problem 0, post: " << post
+					<< ", rit post: " << rit->first.first << std::endl;
 			throw(std::logic_error("Program error. Topological connection problem 0 in cutDeep().\n"));
+		}
 		int i1 = rit->first.second;
 		while (i0 < i1) {  // COURT - check that open end gaps handled correctly
 			bool interpostPath = false;
@@ -89,8 +98,12 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 					break;
 				}
 			}
-			if(!interpostPath)
+			if(!interpostPath) {
+				if (_diagnosticLog)
+					std::cerr << "deepCut::cutDeep() topological connection problem 1, post: " << post
+						<< ", i0: " << i0 << ", i1: " << i1 << std::endl;
 				throw(std::logic_error("Program error. Topological connection problem 1 in cutDeep().\n"));
+			}
 		}
 		++rit;
 		if (rit != rtiHits.end() && rit->first.first == post)
@@ -486,6 +499,10 @@ bool deepCut::uniqueSpatialTet(const Vec3f pos, int& tet, Vec3f& baryWeight) {
 }
 
 bool deepCut::connectOpenEnd(int postNum) {
+	if (_diagnosticLog)
+		std::cerr << "deepCut::connectOpenEnd() entry, postNum: " << postNum
+			<< ", totalPosts: " << _deepPosts.size()
+			<< ", triIntersects: " << _deepPosts[postNum].triIntersects.size() << std::endl;
 	auto &post = _deepPosts[postNum].triIntersects;
 	endPlane *ep = postNum < 1 ? &_endPlanes[0] : &_endPlanes[1];
 	auto makePlane = [&](int topIndex) {
@@ -1795,6 +1812,12 @@ void deepCut::findCutInteriorHoles(const bilinearPatch* blp, const endPlane* ep,
 }
 
 double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleIntersect& to, const bool cutPath, double& minimumBilinearV) {
+	if (_diagnosticLog)
+		std::cerr << "deepCut::surfacePath() entry, from.postNum: " << from.postNum
+			<< ", from.rayIndex: " << from.rayIndex
+			<< ", to.postNum: " << to.postNum
+			<< ", to.rayIndex: " << to.rayIndex
+			<< ", cutPath: " << cutPath << std::endl;
 	const bilinearPatch* blp = nullptr;
 	const endPlane* ep = nullptr;
 	if (from.postNum == to.postNum) {
@@ -1831,22 +1854,22 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 			if (from.postNum < 1) {  // open end case
 				if (to.rayIndex & 1) // hole
 					blp = &_deepPosts[from.postNum + 1].bl;
-				else  // other open end case
-					throw(std::logic_error("Program me."));
+				else  // other open end case at beginning, not a hole - use next post bilinear patch
+					blp = &_deepPosts[from.postNum + 1].bl;
 			}
-			else if (from.postNum == _deepPosts.size() - 1) // open end case in hole
-				throw(std::logic_error("Program me."));
+			else if (from.postNum == _deepPosts.size() - 1) // open end case at last post - use current post bilinear patch
+				blp = &_deepPosts[from.postNum].bl;
 			else
 				blp = &_deepPosts[from.postNum + 1].bl;
 		}
 		else {  // (from.rayIndex < to.rayIndex)
-			if (from.postNum < 1)  // open end case
-				throw(std::logic_error("Program me."));
+			if (from.postNum < 1)  // open end case at beginning - use next post bilinear patch
+				blp = &_deepPosts[from.postNum + 1].bl;
 			else if (from.postNum == _deepPosts.size() - 1) { // open end case in hole
 				if (from.rayIndex & 1) // hole
 					blp = &_deepPosts[from.postNum].bl;
-				else  // other open end case
-					throw(std::logic_error("Program me."));
+				else  // other open end case at last post, not a hole - use current post bilinear patch
+					blp = &_deepPosts[from.postNum].bl;
 			}
 			else {
 				blp = &_deepPosts[from.postNum].bl;
@@ -1977,15 +2000,27 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 			}
 			nE = E;
 		}
-		if (i < 0)
+		if (i < 0) {
+			if (_diagnosticLog)
+				std::cerr << "deepCut::surfacePath() no valid starting triangle, from.triangle: " << from.triangle
+					<< ", from.deepVert: " << from.deepVert << std::endl;
 			throw(std::logic_error("This surfacePath() call does not have a valid starting triangle."));
+		}
 	}
 	else {
-		if ((te = getStartEndTE(to)) == 3)  // COURT use triangleEdgeCuts()
+		if ((te = getStartEndTE(to)) == 3) {  // COURT use triangleEdgeCuts()
+			if (_diagnosticLog)
+				std::cerr << "deepCut::surfacePath() getStartEndTE(to) failed, to.deepVert: " << to.deepVert
+					<< ", to.mat2Vert: " << to.mat2Vert << std::endl;
 			throw(std::logic_error("Program error start/ending a deepCut."));
+		}
 		endTriangle = _mt->triAdjs(te >> 2)[te & 3] >> 2;
-		if ((te = getStartEndTE(from)) == 3)
+		if ((te = getStartEndTE(from)) == 3) {
+			if (_diagnosticLog)
+				std::cerr << "deepCut::surfacePath() getStartEndTE(from) failed, from.deepVert: " << from.deepVert
+					<< ", from.mat2Vert: " << from.mat2Vert << std::endl;
 			throw(std::logic_error("Program error start/ending a deepCut."));
+		}
 	}
 	int topStartV = from.mat2Vert, deepStartV = from.deepVert, topEndV = to.mat2Vert, deepEndV = to.deepVert;
 	return surfacePathSub(topStartV, deepStartV, topEndV, deepEndV, te, 1.0 - rayParams[0], faceParams[0], endTriangle, blp, ep, cutPath, from.scl, minimumBilinearV);

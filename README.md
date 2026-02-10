@@ -45,7 +45,7 @@ A YouTube video by Dr. Cutting will demonstrate basic use the program to simulat
 ----------
 
  1. All flap stretch limits are currently set to the same parameter. This is certainly untrue as it is known that flaps in different parts of the face have different stretch characteristics (e.g. cheek and eyelid skin stretches much more than scalp and forehead.
- 2. Collision response may be inadequate in areas where a tight flap closure is done over a very convex surface. Increased collision density is planned in future iterations of the code.
+ 2. Collision response may be inadequate in areas where a tight flap closure is done over a very convex surface. Edge midpoint collision rays have been added via `tetCollisions::setCollisionDensity()` to increase collision sample density when the multiplier is set above 1.0. This places additional ray samples at bed surface edge midpoints to catch interpenetration between per-vertex rays on convex geometry. Further adaptive subdivision may be warranted for extreme cases.
 
 ### **Code Owners**
 

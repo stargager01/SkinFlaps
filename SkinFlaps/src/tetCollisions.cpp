@@ -102,11 +102,105 @@ void tetCollisions::initSoftCollisions(materialTriangles* mt, vnBccTetrahedra* v
 		bedR.materialNormal *= rayDepth(bedR.P, bedR.N) * 0.75f;  // scale
 	}
 	// _bedRay crossover ignored since will only use shortest one
+	// Generate edge midpoint rays for increased collision density on convex surfaces (README Issue #2).
+	// Only active when _collisionDensityMultiplier > 1.0.
+	_midpointRays.clear();
+	if (_collisionDensityMultiplier > 1.0f)
+		initMidpointRays(bedVerts, tets);
 	tets.erase(-1);
  	if (!tets.empty()) {
 		std::vector<int> tetras;
 		tetras.assign(tets.begin(), tets.end());
 		_ptp->addSoftCollisionTets(tetras);
+	}
+}
+
+void tetCollisions::setCollisionDensity(float multiplier) {
+	if (multiplier < 1.0f)
+		multiplier = 1.0f;
+	_collisionDensityMultiplier = multiplier;
+}
+
+void tetCollisions::initMidpointRays(std::unordered_map<int, int>& bedVerts, std::unordered_set<int>& tets) {
+	// Generate collision rays at edge midpoints of bed surface (material 5) triangles.
+	// This increases collision sample density to prevent interpenetration on convex surfaces
+	// where per-vertex rays are too widely spaced (README Known Issues #2).
+	//
+	// Each unique edge of the bed surface gets one midpoint ray. The ray's material normal
+	// is averaged from its two endpoint vertex normals (already computed in _bedRays).
+	// The containing tet and barycentric weight are found via parametricEdgeTet.
+	struct edgeKey {
+		int v0, v1;
+		bool operator==(const edgeKey& o) const { return v0 == o.v0 && v1 == o.v1; }
+	};
+	struct edgeKeyHash {
+		std::size_t operator()(const edgeKey& k) const {
+			// Cantor pairing function
+			std::size_t h = (std::size_t)(k.v0 + k.v1) * (k.v0 + k.v1 + 1) / 2 + k.v1;
+			return h;
+		}
+	};
+	std::unordered_set<edgeKey, edgeKeyHash> processedEdges;
+	processedEdges.reserve(1024);
+	_midpointRays.reserve(512);
+
+	for (int n = _mt->numberOfTriangles(), i = 0; i < n; ++i) {
+		if (_mt->triangleMaterial(i) != 5)
+			continue;
+		int* tr = _mt->triangleVertices(i);
+		// Process each edge of this bed triangle
+		for (int e = 0; e < 3; ++e) {
+			int va = tr[e];
+			int vb = tr[(e + 1) % 3];
+			// Order vertices so each edge is represented once
+			edgeKey ek;
+			ek.v0 = (va < vb) ? va : vb;
+			ek.v1 = (va < vb) ? vb : va;
+			if (!processedEdges.insert(ek).second)
+				continue;  // edge already processed
+			// Both endpoints must be bed vertices with existing rays
+			auto itA = bedVerts.find(va);
+			auto itB = bedVerts.find(vb);
+			if (itA == bedVerts.end() || itB == bedVerts.end())
+				continue;
+			int rayIdxA = itA->second;
+			int rayIdxB = itB->second;
+			// Find the tet containing the edge midpoint using existing infrastructure
+			Vec3f gridLocus;
+			int midTet = _vnt->parametricEdgeTet(va, vb, 0.5f, gridLocus);
+			if (midTet < 0)
+				continue;  // couldn't locate containing tet, skip this midpoint
+			midpointRay mr;
+			mr.vertex0 = va;
+			mr.vertex1 = vb;
+			mr.tet = midTet;
+			// Compute barycentric weight within the containing tet
+			auto tc = _vnt->tetCentroid(midTet);
+			_vnt->gridLocusToBarycentricWeight(gridLocus, tc, mr.baryWeight);
+			// Determine deformation gradient index from the containing tet's centroid type
+			int ha, level;
+			bool up;
+			_vnt->centroidType(tc, level, ha, up);
+			mr.restIdx = ha << 1;
+			if (!up)
+				++(mr.restIdx);
+			// Average material normals from the two endpoint bed rays (pre-normalization normals).
+			// Note: _bedRays[].materialNormal has already been normalized and scaled by rayDepth*0.75
+			// at this point, so we average the scaled normals. This gives the midpoint a ray depth
+			// that is the mean of its two endpoints, which is reasonable for smooth surfaces.
+			mr.materialNormal = (_bedRays[rayIdxA].materialNormal + _bedRays[rayIdxB].materialNormal) * 0.5f;
+			// Compute initial spatial position and normal
+			_vnt->getBarycentricTetPosition(mr.tet, mr.baryWeight, mr.P);
+			const int* nodes = _vnt->tetNodes(mr.tet);
+			Vec3f cols[3];
+			for (int k = 1; k < 4; ++k)
+				cols[k - 1] = _vnt->nodeSpatialCoordinate(nodes[k]) - _vnt->nodeSpatialCoordinate(nodes[0]);
+			Mat3x3f Nmat(cols[0], cols[1], cols[2]);
+			mr.N = Nmat * _rest[mr.restIdx] * mr.materialNormal;
+			// Register this midpoint's tet for soft collision processing
+			tets.insert(midTet);
+			_midpointRays.push_back(mr);
+		}
 	}
 }
 
@@ -124,6 +218,16 @@ void tetCollisions::findSoftCollisionPairs() {
 			cols[i - 1] = _vnt->nodeSpatialCoordinate(nodes[i]) - _vnt->nodeSpatialCoordinate(nodes[0]);
 		Mat3x3f N(cols[0], cols[1], cols[2]);
 		bv.N = N * _rest[bv.restIdx] * bv.materialNormal;
+	}
+	// Update midpoint ray positions and normals from their containing tets' deformation
+	for (auto& mr : _midpointRays) {
+		_vnt->getBarycentricTetPosition(mr.tet, mr.baryWeight, mr.P);
+		const int* nodes = _vnt->tetNodes(mr.tet);
+		Vec3f cols[3];
+		for (int i = 1; i < 4; ++i)
+			cols[i - 1] = _vnt->nodeSpatialCoordinate(nodes[i]) - _vnt->nodeSpatialCoordinate(nodes[0]);
+		Mat3x3f N(cols[0], cols[1], cols[2]);
+		mr.N = N * _rest[mr.restIdx] * mr.materialNormal;
 	}
 	std::vector<boundingBox<float> > flapBox;
 	boundingBox<float> bb;
@@ -193,10 +297,74 @@ void tetCollisions::findSoftCollisionPairs() {
 		}
 	);
 
+	// Process midpoint rays for increased collision density on convex surfaces.
+	// These use the same ray-triangle intersection test as vertex rays, but the
+	// "bottom" of the collision pair uses the midpoint's tet and barycentric weight
+	// rather than a mesh vertex's tet.
+	std::vector<int> mpTopTets, mpBottomTets;
+	std::vector<std::array<float, 3> > mpTopBarys, mpBottomBarys, mpCollisionNormals;
+	if (!_midpointRays.empty()) {
+		mpTopTets.assign(_midpointRays.size(), -1);
+		mpBottomTets.assign(_midpointRays.size(), -1);
+		mpTopBarys.assign(_midpointRays.size(), std::array<float, 3>());
+		mpBottomBarys.assign(_midpointRays.size(), std::array<float, 3>());
+		mpCollisionNormals.assign(_midpointRays.size(), std::array<float, 3>());
+		tbb::parallel_for(tbb::blocked_range<size_t>(0, _midpointRays.size()),
+			[&](const tbb::blocked_range<size_t>& r) {
+				for (size_t j = r.begin(); j != r.end(); ++j) {
+					float nearT = FLT_MAX;
+					midpointRay& mr = _midpointRays[j];
+					boundingBox<float> bedBox;
+					bedBox.Empty_Box();
+					bedBox.Enlarge_To_Include_Point(mr.P.xyz);
+					bedBox.Enlarge_To_Include_Point((mr.P - mr.N).xyz);
+					int nearV = -1;
+					for (size_t n = _flapBotTris.size(), i = 0; i < n; ++i) {
+						if (bedBox.Intersection(flapBox[i])) {
+							Vec3f tri[3];
+							int* tr = _mt->triangleVertices(_flapBotTris[i]);
+							for (int k = 0; k < 3; ++k)
+								_mt->getVertexCoordinate(tr[k], tri[k].xyz);
+							Mat3x3f C(tri[1] - tri[0], tri[2] - tri[0], mr.N);
+							Vec3f R = C.Robust_Solve_Linear_System(mr.P - tri[0]);
+							if (R[0] < 1e-6f || R[1] < 1e-6f || R[2] < 1e-4f || R[0] + R[1] > 1.0f || R[0] > 1.0f || R[1] > 1.0f || R[2] > 1.0f)
+								continue;
+							if (nearT > R[2]) {
+								nearT = R[2];
+								if (R[0] + R[1] < 0.66667f)
+									nearV = tr[0];
+								else if (R[0] > R[1])
+									nearV = tr[1];
+								else
+									nearV = tr[2];
+								collisionsFound = true;
+							}
+						}
+					}
+					if (nearV < 0)
+						continue;
+					// found midpoint collision pair
+					mpTopTets[j] = _vnt->getVertexTetrahedron(nearV);
+					const Vec3f* W = _vnt->getVertexWeight(nearV);
+					std::array<float, 3> tmp = { W->X, W->Y, W->Z };
+					mpTopBarys[j] = tmp;
+					// Bottom of midpoint collision uses the midpoint's own tet and barycentric weight
+					mpBottomTets[j] = mr.tet;
+					tmp = { mr.baryWeight.X, mr.baryWeight.Y, mr.baryWeight.Z };
+					mpBottomBarys[j] = tmp;
+					Vec3f Nv = mr.N * nearT;
+					tmp = { Nv.X, Nv.Y, Nv.Z };
+					mpCollisionNormals[j] = tmp;
+				}
+			}
+		);
+	}
+
 	if (!collisionsFound) {
 		_ptp->clearSoftCollisions();
 		return;
 	}
+	// Compact vertex ray collision results
 	int offset = 0;
 	for (int n = topTets.size(), i = 0; i < n; ++i) {
 		if (topTets[i] > -1) {
@@ -212,6 +380,16 @@ void tetCollisions::findSoftCollisionPairs() {
 	topBarys.resize(offset);
 	bottomBarys.resize(offset);
 	collisionNormals.resize(offset);
+	// Append midpoint ray collision results into the same arrays
+	for (size_t n = mpTopTets.size(), i = 0; i < n; ++i) {
+		if (mpTopTets[i] > -1) {
+			topTets.push_back(mpTopTets[i]);
+			bottomTets.push_back(mpBottomTets[i]);
+			topBarys.push_back(mpTopBarys[i]);
+			bottomBarys.push_back(mpBottomBarys[i]);
+			collisionNormals.push_back(mpCollisionNormals[i]);
+		}
+	}
 
 //	tbb::tick_count t1 = tbb::tick_count::now();
 //	double time = (t1 - t0).seconds();

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <climits>
 #include <limits>
 #include <algorithm>
 #include <cmath>
@@ -261,6 +262,11 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 #endif
 	tetTriVec.clear();
 
+	// Bug #2 determinism fix: canonicalize tet indices after parallel phase
+	std::unordered_map<int, int> tetRemap;
+	if (_deterministicMode)
+		tetRemap = canonicalizeNewTets((int)_vbt->_tetCentroids.size());
+
 	// vbt->_tetCentroids has the megatets remaining
 	int incr = _nSurfaceTets - _vbt->_tetCentroids.size();
 	_vbt->_tetCentroids.insert(_vbt->_tetCentroids.end(), incr, bccTetCentroid());
@@ -291,6 +297,16 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 		extNodeLocs.push_back(enl);
 	}
 	_ntsHash.clear();
+	// Bug #2 determinism fix: remap tetIdx references in exterior node data
+	if (_deterministicMode && !tetRemap.empty()) {
+		for (auto& enl : extNodeLocs) {
+			for (auto& nts : enl.tetNodes) {
+				auto rit = tetRemap.find(nts.tetIdx);
+				if (rit != tetRemap.end())
+					nts.tetIdx = rit->second;
+			}
+		}
+	}
 
 	_firstNewExteriorNode = _vbt->_nodeGridLoci.size();
 	oneapi::tbb::concurrent_vector<extNode> eNodes;
@@ -305,6 +321,10 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 				assignExteriorTetNodes(extNodeLocs[i].loc, extNodeLocs[i].tetNodes, eNodes);
 		});
 #endif
+	// Bug #2 determinism fix: canonicalize exterior node order for deterministic node indices
+	if (_deterministicMode)
+		canonicalizeExteriorNodes(eNodes);
+
 	for (auto& en : eNodes) {
 		int eNode = _vbt->_nodeGridLoci.size();
 		_vbt->_nodeGridLoci.push_back(std::move(en.loc));
@@ -588,6 +608,11 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 		});
 #endif
 
+	// Bug #2 determinism fix: canonicalize tet indices after parallel phase
+	std::unordered_map<int, int> tetRemap;
+	if (_deterministicMode)
+		tetRemap = canonicalizeNewTets(0);
+
 	_vbt->_tetCentroids.assign(_nSurfaceTets, bccTetCentroid());
 	_vbt->_tetNodes.assign(_nSurfaceTets, std::array<int, 4>());
 	_surfaceTetTris.assign(_nSurfaceTets, tetTris());
@@ -615,6 +640,16 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 		extNodeLocs.push_back(enl);
 	}
 	_ntsHash.clear();
+	// Bug #2 determinism fix: remap tetIdx references in exterior node data
+	if (_deterministicMode && !tetRemap.empty()) {
+		for (auto& enl : extNodeLocs) {
+			for (auto& nts : enl.tetNodes) {
+				auto rit = tetRemap.find(nts.tetIdx);
+				if (rit != tetRemap.end())
+					nts.tetIdx = rit->second;
+			}
+		}
+	}
 	// get tets where vertices reside
 	_vbt->_vertexTets.clear();
 	_vbt->_vertexTets.assign(_mt->numberOfVertices(), -1);
@@ -658,6 +693,10 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 				assignExteriorTetNodes(extNodeLocs[i].loc, extNodeLocs[i].tetNodes, eNodes);
 		});
 #endif
+
+	// Bug #2 determinism fix: canonicalize exterior node order for deterministic node indices
+	if (_deterministicMode)
+		canonicalizeExteriorNodes(eNodes);
 
 	for (auto& en : eNodes) {
 		int eNode = _vbt->_nodeGridLoci.size();
@@ -1808,6 +1847,80 @@ void vnBccTetCutter_tbb::getConnectedComponents(const tetTriangles& tt, oneapi::
 			}
 		}
 	}
+}
+
+std::unordered_map<int, int> vnBccTetCutter_tbb::canonicalizeNewTets(int startIdx) {
+	// Bug #2 determinism fix: After TBB parallel_for, _newTets contains tets in nondeterministic
+	// order because tbb::concurrent_vector::push_back and atomic fetch_add on _nSurfaceTets
+	// produce thread-scheduling-dependent insertion order. Similarly, _centTris (a concurrent_hash_map)
+	// iterates in nondeterministic hash order when building tetTriVec, which feeds getConnectedComponents.
+	//
+	// This function sorts _newTets into a canonical order based on spatial coordinates:
+	//   Primary key:   centroid coordinates (tc[0], tc[1], tc[2]) lexicographic
+	//   Secondary key:  triangle index list (for virtual-noded tets sharing the same centroid)
+	// Then reassigns tetIdx values sequentially from startIdx, and returns a mapping from
+	// old (nondeterministic) tetIdx to new (canonical) tetIdx.
+	//
+	// The returned remap must be applied to:
+	//   - nodeTetSegment.tetIdx entries in _ntsHash / extNodeLocs (exterior node references)
+	//   - extNode.tiPairs[].first entries in eNodes (after second parallel_for)
+	//
+	// Data structures that are populated FROM _newTets after this call (e.g. _surfaceTetTris,
+	// _vbt->_tetNodes, _vbt->_tetCentroids) automatically get canonical indices since _newTets
+	// itself has been re-indexed before consumption.
+	std::unordered_map<int, int> remap;
+	if (_newTets.empty())
+		return remap;
+	std::sort(_newTets.begin(), _newTets.end(), [](const newTet& a, const newTet& b) {
+		// Primary sort: centroid coordinates lexicographic
+		for (int i = 0; i < 3; ++i) {
+			if (a.tc[i] != b.tc[i])
+				return a.tc[i] < b.tc[i];
+		}
+		// Secondary sort: triangle list lexicographic (tris are sorted within each tet
+		// because getConnectedComponents uses std::set to collect connected triangles)
+		return a.tris < b.tris;
+	});
+	// Build old->new tetIdx mapping and reassign sequentially
+	remap.reserve(_newTets.size());
+	for (int i = 0; i < (int)_newTets.size(); ++i) {
+		int newIdx = startIdx + i;
+		if (_newTets[i].tetIdx != newIdx)
+			remap[_newTets[i].tetIdx] = newIdx;
+		_newTets[i].tetIdx = newIdx;
+	}
+	// Update _nSurfaceTets to match the sequential assignment
+	_nSurfaceTets.store(startIdx + (int)_newTets.size());
+	return remap;
+}
+
+void vnBccTetCutter_tbb::canonicalizeExteriorNodes(oneapi::tbb::concurrent_vector<extNode>& eNodes) {
+	// Bug #2 determinism fix: After TBB parallel_for, eNodes contains exterior nodes in
+	// nondeterministic order because tbb::concurrent_vector::push_back order depends on
+	// thread scheduling. Since node indices are assigned sequentially as eNodes are consumed
+	// (nodeIdx = _nodeGridLoci.size() then push_back), nondeterministic eNodes order produces
+	// nondeterministic node indices.
+	//
+	// This function sorts eNodes into a canonical order:
+	//   Primary key:   grid location (loc[0], loc[1], loc[2]) lexicographic
+	//   Secondary key:  minimum tetIdx among tiPairs (for virtual nodes at the same grid location)
+	// This ensures each exterior node gets the same index across runs.
+	if (eNodes.size() < 2)
+		return;
+	std::sort(eNodes.begin(), eNodes.end(), [](const extNode& a, const extNode& b) {
+		// Primary sort: grid location lexicographic
+		for (int i = 0; i < 3; ++i) {
+			if (a.loc[i] != b.loc[i])
+				return a.loc[i] < b.loc[i];
+		}
+		// Secondary sort: minimum tet index in tiPairs (for virtual nodes at same location)
+		int minA = INT_MAX, minB = INT_MAX;
+		for (auto& p : a.tiPairs)
+			if (p.first < minA) minA = p.first;
+		for (auto& p : b.tiPairs)
+			if (p.first < minB) minB = p.first;
+		return minA < minB;
+	});
 }
 
 bool vnBccTetCutter_tbb::setupBccIntersectionStructures(int maximumGridDimension)

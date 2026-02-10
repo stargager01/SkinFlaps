@@ -30,7 +30,9 @@ public:
 	void createFirstMacroTets(materialTriangles* mt, vnBccTetrahedra* vbt, const int nLevels, const int maximumDimensionMacroSubdivs);  // creates initial macro tet environment
 	void addNewMultiresIncision();  // after have done createFirstMacroTets() and possibly made other incisions, this routine inputs new incision(s) and creates new tet structure.
 	inline void setRemapTetPhysics(remapTetPhysics* rtp) { _rtp = rtp; }  // for use in surgical simulation project to reset spatial coords after a topo change.  Can be ignored elsewhere if desired.
-	vnBccTetCutter_tbb(void) { _rtp = nullptr; }
+	inline void setDeterministicMode(bool enable) { _deterministicMode = enable; }
+	inline bool getDeterministicMode() const { return _deterministicMode; }
+	vnBccTetCutter_tbb(void) { _rtp = nullptr; _deterministicMode = true; }
 	~vnBccTetCutter_tbb(void){}
 
 private:
@@ -203,6 +205,14 @@ private:
 		std::vector<int> tris;
 	};
 	oneapi::tbb::concurrent_vector<newTet> _newTets;
+
+	bool _deterministicMode;  // When true, post-parallel sorting steps canonicalize node/tet indices for deterministic history replay.
+	// Bug #2 fix: After TBB parallel cutting, tbb::concurrent_vector and atomic fetch_add produce
+	// nondeterministic insertion order for new tets and nodes. These functions sort the results
+	// into a canonical order based on spatial coordinates so that replaying the same .hst history
+	// file always produces identical node/tet indices.
+	std::unordered_map<int, int> canonicalizeNewTets(int startIdx);
+	void canonicalizeExteriorNodes(oneapi::tbb::concurrent_vector<extNode>& eNodes);
 
 	bool latticeTest();
 	void macrotetRecutCore();

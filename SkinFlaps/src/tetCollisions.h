@@ -3,6 +3,9 @@
 
 #include <vector>
 #include <array>
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include "Vec2f.h"
 #include "Vec3f.h"
 #include "Mat3x3f.h"
@@ -21,8 +24,14 @@ public:
 	void updateFixedCollisions(materialTriangles *mt, vnBccTetrahedra *vnt);  // must be done after every topo change
 	bool empty() { return _fixedCollisionSets.empty() && _bedRays.empty(); }
 	inline void setPdTetPhysics(pdTetPhysics *ptp) { _ptp = ptp; }
-	tetCollisions() : _itCount(0), _initialized(false), _minTime((double)FLT_MAX), _maxTime(0.0){
-		_fixedCollisionSets.clear(); _flapBotTris.clear(); 
+	// Collision density multiplier for convex surface areas. Default 1.0 uses only per-vertex rays (original behavior).
+	// Values > 1.0 add edge midpoint rays on bed surface triangles to increase collision sample density,
+	// improving collision response where tight flap closures are done over very convex surfaces.
+	// See README Known Issues #2.
+	void setCollisionDensity(float multiplier);
+	inline float getCollisionDensity() const { return _collisionDensityMultiplier; }
+	tetCollisions() : _itCount(0), _initialized(false), _collisionDensityMultiplier(1.0f), _minTime((double)FLT_MAX), _maxTime(0.0){
+		_fixedCollisionSets.clear(); _flapBotTris.clear();
 	}
 	~tetCollisions() {}
 
@@ -42,6 +51,24 @@ private:
 	};
 	std::vector<vertexRay> _bedRays;
 	std::vector<int> _flapBotTris;
+
+	// Edge midpoint collision rays for increased density on convex surfaces.
+	// These rays are placed at the midpoint of bed surface (material 5) triangle edges,
+	// providing collision samples between the per-vertex rays. This catches interpenetration
+	// that would otherwise slip between widely-spaced vertex rays on convex geometry.
+	struct midpointRay {
+		int vertex0;        // first endpoint vertex of the bed edge
+		int vertex1;        // second endpoint vertex of the bed edge
+		int tet;            // containing tetrahedron for this midpoint
+		Vec3f baryWeight;   // barycentric weight within the containing tet
+		Vec3f P;            // current spatial position (interpolated each frame)
+		Vec3f N;            // current deformed normal direction
+		Vec3f materialNormal; // material-space normal (averaged from endpoints, scaled by ray depth)
+		int restIdx;        // deformation gradient index (from containing tet)
+	};
+	std::vector<midpointRay> _midpointRays;
+	float _collisionDensityMultiplier;
+	void initMidpointRays(std::unordered_map<int, int>& bedVerts, std::unordered_set<int>& tets);
 
 	struct fixedCollisionSet {
 		std::string levelSetFilename;

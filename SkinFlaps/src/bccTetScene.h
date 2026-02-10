@@ -60,7 +60,7 @@ private:
 	remapTetPhysics _rtp;
 	tetCollisions _tetCol;
 	tetSubset _tetSubsets;
-	vnBccTetCutter_tbb _tc;  // multithreaded version using Intel threaded building blocks.  Much faster, but indices of nodes and tets different each run as nondeterministic.
+	vnBccTetCutter_tbb _tc;  // multithreaded version using Intel threaded building blocks.  Much faster.  Bug #2 fix: post-parallel canonicalization sorts nodes/tets by spatial coordinates for deterministic indices across runs.
 	pdTetPhysics _ptp;
 	bool _forcesApplied, _tetsModified, _physicsPaused;
 	float _lowTetWeight;

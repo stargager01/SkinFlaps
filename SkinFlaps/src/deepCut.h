@@ -33,6 +33,7 @@ class deepCut : public skinCutUndermineTets
 {
 public:
 	void setGl3wGraphics(gl3wGraphics *gl3w) { _gl3w = gl3w; }  // for debug - nuke later
+	void setDiagnosticLog(bool enable) { _diagnosticLog = enable; }
 
 	bool inputCorrectFence(fence* fp, FacialFlapsGui* ffg);
 	int addDeepPost(const int triangle, const float(&uv)[2], const Vec3d& rayDirection, bool closedEnd);
@@ -49,6 +50,7 @@ public:
 	~deepCut(){}
 
 protected:
+	bool _diagnosticLog = false;
 	bool _startOpen, _endOpen;
 	std::vector<std::array<int, 3> > _firstSideTriangles;  // new triangles produced on first side of the cut. in sort order so can do binary search, but not usually consecutive.
 	struct surfaceCutLine {  // a cut line intersecting a cutting triangle with the embedded surface

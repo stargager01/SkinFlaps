@@ -11,6 +11,7 @@
 #include <tuple>
 #include <assert.h>
 #include <stdexcept>
+#include <string>
 #include <algorithm>
 #include <functional>
 #include <deque>
@@ -53,14 +54,75 @@ bool skinCutUndermineTets::skinCut(std::vector<Vec3f> &topCutPoints, std::vector
 		_mt->closestPoint(topCutPoints[i].xyz, tri, uv);
 		Vec3f v3;
 		_mt->getBarycentricPosition(tri, uv, v3.xyz);
-		if ((i<1 && _startOpen) || (i>n - 2 && _endOpen)){  // COURT - fix me. Must allow re-entrant endOpen not yet programmed.
+		if ((i<1 && _startOpen) || (i>n - 2 && _endOpen)){
+			// T-in/T-out: connect the start or end of this incision to a pre-existing incision edge.
+			// addTinEdgeVertex() finds the closest material 3 (incision wall) top edge and returns a
+			// vertex on it.  This works correctly when connecting to the MIDDLE of a pre-existing
+			// incision, where the groove has full quad topology on both sides of the connection point.
+			//
+			// KNOWN LIMITATION (Bug #1 - re-entrant T-in/T-out to pre-existing incision begin/end):
+			// When the T-in/T-out vertex coincides with the beginning or end of a pre-existing
+			// incision (rather than its middle), the incision groove terminates at that vertex and the
+			// material 3 quad structure does not continue beyond it.  At such endpoints:
+			//   - flapSurfaceSplitter() expects neighbor relationships that only hold at midpoints.
+			//   - topDeepSplit_Sub() needs the deep vertex to have proper connectivity for the split.
+			//   - The groove must be extended to create a proper T-junction topology at the endpoint.
+			//
+			// To fully implement re-entrant T-in/T-out to incision endpoints, the following is needed:
+			//   1. Detect that the T-in/T-out vertex is at an incision endpoint (not a midpoint).
+			//   2. Extend the incision groove at the endpoint to accommodate the new branch.
+			//   3. Create proper material 3 quad topology for the T-junction at the endpoint.
+			//   4. Ensure the deep vertex is correctly shared or split for the new incision branch.
+			//   5. Update flapSurfaceSplitter() to handle the endpoint junction topology.
 			topCutPoints[i].set(v3);
+			int tinVertex;
 			if (i<1)
-				topMtVertices[i] = addTinEdgeVertex(topCutPoints[0], topCutPoints[1]);
+				tinVertex = addTinEdgeVertex(topCutPoints[0], topCutPoints[1]);
 			else
-				topMtVertices[i] = addTinEdgeVertex(topCutPoints[n-1], topCutPoints[n-2]);
+				tinVertex = addTinEdgeVertex(topCutPoints[n-1], topCutPoints[n-2]);
+			if (tinVertex < 0)
+				throw(std::logic_error("Incision T-in/T-out failed: no pre-existing incision edge "
+					"found near the " + std::string(i < 1 ? "start" : "end") + " point. "
+					"Ensure a previous incision exists nearby."));
+			// Detect re-entrant condition: T-in/T-out landing at the begin/end of a pre-existing
+			// incision rather than its middle.  At a midpoint the vertex appears on the top edge
+			// (v0 or v1) of at least 2 material 3 "top-edge" triangles (those whose edge 0 is
+			// adjacent to material 2).  At an incision endpoint it appears in only 1 such triangle
+			// because the groove terminates there.
+			// Skip this check when T-out connects back to the first vertex of the current incision
+			// (closed-loop case), which is handled by topDeepSplit()'s closed-loop path.
+			if (tinVertex != _firstTopVertex) {
+				int topIncisionEdgeCount = 0;
+				for (int t = 0, nTri = _mt->numberOfTriangles(); t < nTri; ++t) {
+					if (_mt->triangleMaterial(t) != 3)
+						continue;
+					if (_mt->triangleMaterial(_mt->triAdjs(t)[0] >> 2) != 2)
+						continue;
+					int* trv = _mt->triangleVertices(t);
+					if (trv[0] == tinVertex || trv[1] == tinVertex)
+						++topIncisionEdgeCount;
+				}
+				if (topIncisionEdgeCount < 2) {
+					std::string pos = (i < 1) ? "start (T-in)" : "end (T-out)";
+					throw(std::logic_error(
+						"Re-entrant incision to pre-existing cut not yet supported. Incision "
+						+ pos + " detected at begin/end of existing incision (vertex "
+						+ std::to_string(tinVertex) + ", incident top-edge triangles: "
+						+ std::to_string(topIncisionEdgeCount) + "). "
+						"The new incision cannot branch from an existing incision's endpoint. "
+						"Try connecting to a point along the middle of the existing incision."));
+				}
+			}
+			topMtVertices[i] = tinVertex;
 			auto dbit = _deepBed.find(topMtVertices[i]);
-			assert(dbit != _deepBed.end());
+			if (dbit == _deepBed.end())
+				throw(std::logic_error("Incision T-in/T-out failed: vertex "
+					+ std::to_string(topMtVertices[i]) + " not found in deep bed map. "
+					"Mesh topology may be inconsistent."));
+			if (dbit->second.deepMtVertex < 0)
+				throw(std::logic_error("Incision T-in/T-out failed: deep bed vertex for T-in/T-out "
+					"vertex " + std::to_string(topMtVertices[i]) + " has not been created. "
+					"The pre-existing incision may not have been fully processed."));
 			deepVertexLine[i] = dbit->second.deepMtVertex;
 			continue;
 		}
