@@ -240,7 +240,30 @@ void vnBccTetrahedra::gridLocusToBarycentricWeight(const Vec3f &gridLocus, const
 		V[i] -= V[0];
 	Mat3x3f M(V[1], V[2], V[3]);
 	barycentricWeight = M.Robust_Solve_Linear_System(gridLocus - V[0]);
-	assert(barycentricWeight[0] >= 0.0f && barycentricWeight[0] <= 1.0f && barycentricWeight[1]>=0.0f && barycentricWeight[1] <= 1.0f && barycentricWeight[2] >= 0.0f && barycentricWeight[2] <= 1.0f && barycentricWeight[0] + barycentricWeight[1] + barycentricWeight[2] <= 1.0f);
+	// Clamp barycentric weights to [0,1] to handle floating-point precision issues.
+	// The linear solve can produce values like -1e-7 or 1.0000001 at tet boundaries.
+	const float eps = 1e-4f;
+	for (int i = 0; i < 3; ++i) {
+		if (barycentricWeight[i] < 0.0f) {
+			if (barycentricWeight[i] < -eps)
+				throw std::runtime_error("Barycentric weight significantly negative: point may be outside tetrahedron.");
+			barycentricWeight[i] = 0.0f;
+		}
+		if (barycentricWeight[i] > 1.0f) {
+			if (barycentricWeight[i] > 1.0f + eps)
+				throw std::runtime_error("Barycentric weight significantly > 1: point may be outside tetrahedron.");
+			barycentricWeight[i] = 1.0f;
+		}
+	}
+	float sum = barycentricWeight[0] + barycentricWeight[1] + barycentricWeight[2];
+	if (sum > 1.0f) {
+		if (sum > 1.0f + eps)
+			throw std::runtime_error("Barycentric weight sum significantly > 1: point may be outside tetrahedron.");
+		float scale = 1.0f / sum;
+		barycentricWeight[0] *= scale;
+		barycentricWeight[1] *= scale;
+		barycentricWeight[2] *= scale;
+	}
 }
 
 int vnBccTetrahedra::faceAdjacentMultiresTet(const bccTetCentroid tc, const int face, bccTetCentroid& tcAdj)
