@@ -537,28 +537,26 @@ void bccTetScene::updateOldPhysicsLattice()
 
 void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSizeLevels)
 {
+	// Append to debug log if it exists
+	std::ofstream dbgLog(_dataDirectory + "loadScene_debug.log", std::ios::app);
 	try {
 		_tetsModified = false;
 		_tc.setRemapTetPhysics(&_rtp);
+		dbgLog << "  Lattice: createFirstMacroTets start" << std::endl;
 		_tc.createFirstMacroTets(_mt, &_vnTets, nTetSizeLevels, maxDimMegatetSubdivs);
+		dbgLog << "  Lattice: createFirstMacroTets done. tets=" << _vnTets.tetNumber() << " nodes=" << _vnTets.nodeNumber() << std::endl;
 		_surgAct->getDeepCutPtr()->setVnBccTetrahedra(&_vnTets);
 		_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
-
-		// TODO: Configure cut spacing from scene file. Example:
-		// _surgAct->getDeepCutPtr()->setCutSpacingInv(sceneFile.cutSpacingInv);
-
-		// TODO: Spring constant is a placeholder; revisit after macrotet issue is resolved.
-		// This should be derived from scene/material properties rather than hardcoded.
 		_surgAct->getHooks()->setSpringConstant(_lowTetWeight * 1.5f);
 
 #ifdef NO_PHYSICS
 		_firstSpatialCoords.assign(_vnTets.nodeNumber(), Vec3f());
-		_vnTets.setNodeSpatialCoordinatePointer(&_firstSpatialCoords[0]);  // for no physics debug
+		_vnTets.setNodeSpatialCoordinatePointer(&_firstSpatialCoords[0]);
 #else
+		dbgLog << "  Lattice: building tetSizeMult" << std::endl;
 		std::vector<uint8_t> tetSizeMult;
 		tetSizeMult.reserve(_vnTets.tetNumber());
 		for (int n = _vnTets.tetNumber(), i = 0; i < n; ++i) {
-			// COURT may do faster with just first 2 nodes
 			uint8_t sizeBit = 1;
 			auto& c = _vnTets.tetCentroid(i);
 			int _loopGuard = 0;
@@ -571,19 +569,24 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 			}
 			tetSizeMult.push_back(sizeBit);
 		}
+		dbgLog << "  Lattice: createBccTetStructure_multires" << std::endl;
 		std::array<float, 3>* nodeSpatialCoords = _ptp.createBccTetStructure_multires(_vnTets.getTetNodeArray(), tetSizeMult, (float)_vnTets.getTetUnitSize());
-		_vnTets.setNodeSpatialCoordinatePointer(nodeSpatialCoords);  // vector created in _ptp
+		_vnTets.setNodeSpatialCoordinatePointer(nodeSpatialCoords);
 #endif
+		dbgLog << "  Lattice: materialCoordsToNodeSpatialVector" << std::endl;
 		_vnTets.materialCoordsToNodeSpatialVector();
 
+		dbgLog << "  Lattice: getTJunctionConstraints" << std::endl;
 		std::vector<int> subNodes;
 		std::vector<std::vector<int> > macroNodes;
 		std::vector<std::vector<float> > macroBarys;
 		_vnTets.getTJunctionConstraints(subNodes, macroNodes, macroBarys);
+		dbgLog << "  Lattice: addInterNodeConstraints" << std::endl;
 		_ptp.addInterNodeConstraints(subNodes, macroNodes, macroBarys);
 
 		_tetsModified = false;
 		_physicsPaused = false;
+		dbgLog << "  Lattice: complete" << std::endl;
 	}  // end try block
 	catch (const std::exception& e) {
 		_surgAct->taskThreadError = true;
