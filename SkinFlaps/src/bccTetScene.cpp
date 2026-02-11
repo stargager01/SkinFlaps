@@ -36,7 +36,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	std::ifstream istr(path.c_str());
 	std::string jsonStr;
 	if (!istr.is_open()) {
-		path = std::string("Unable to load: ") + path;
+		path = std::string("[Step 1/12] Unable to open scene file: ") + path;
 		_surgAct->sendUserMessage(path.c_str(), "Error Message");
 		istr.close();
 		return false;
@@ -50,7 +50,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	istr.close();
 	json::Value my_data = json::Deserialize(jsonStr);  // will trim leading and trailing white space from {} pair
 	if (my_data.GetType() != json::ObjectVal) {
-		std::string errMsg = "Scene file not in correct JSON format (got type ";
+		std::string errMsg = "[Step 2/12] Scene file not in correct JSON format (got type ";
 		errMsg += std::to_string(my_data.GetType()) + " instead of Object): ";
 		errMsg += sceneFileName;
 		_surgAct->sendUserMessage(errMsg.c_str(), "Error Message");
@@ -61,7 +61,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		scnObj = my_data.ToObject();
 	}
 	catch (const std::runtime_error& e) {
-		std::string errMsg = std::string("JSON type error parsing scene file: ") + e.what();
+		std::string errMsg = std::string("[Step 2/12] JSON type error parsing scene file: ") + e.what();
 		_surgAct->sendUserMessage(errMsg.c_str(), "Error Message");
 		return false;
 	}
@@ -92,12 +92,12 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	std::map<int, GLuint> txMap;
 	std::string nrm, tex;
 	if ((oit = scnObj.find("textureFiles")) == scnObj.end()) {
-		_surgAct->sendUserMessage("No texture files in scene file-", "Error Message");
+		_surgAct->sendUserMessage("[Step 3/12] No textureFiles section in scene file-", "Error Message");
 		return false;
 	}
 	else {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("textureFiles section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 3/12] textureFiles section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object txObj = oit->second.ToObject();
@@ -108,7 +108,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			{
 				std::ifstream texCheck(path.c_str());
 				if (!texCheck.is_open()) {
-					std::string errMsg = "Texture file not found: " + path +
+					std::string errMsg = "[Step 3/12] Texture file not found: " + path +
 						"\nDirectory: " + std::string(dataDirectory) +
 						"\nFilename: " + suboit->first;
 					_surgAct->sendUserMessage(errMsg.c_str(), "Texture Load Error");
@@ -117,7 +117,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			}
 			GLuint txNow = _gl3w->getTextures()->loadTexture(suboit->second.ToInt(), path.c_str());
 			if (txNow > 0xfffffffe || txNow == 0) {
-				std::string errMsg = "Failed to load texture: " + path;
+				std::string errMsg = "[Step 3/12] Failed to load texture: " + path;
 				if (txNow == 0)
 					errMsg += "\n(Unsupported format or duplicate texture ID)";
 				_surgAct->sendUserMessage(errMsg.c_str(), "Texture Load Error");
@@ -129,7 +129,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	if ((oit = scnObj.find("staticObjects")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("staticObjects section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 4/12] staticObjects section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object statObj = oit->second.ToObject();
@@ -145,14 +145,14 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 				else if (suboit2->first == "normalMap")
 					txIds.push_back(suboit2->second.ToInt());
 				else {
-					_surgAct->sendUserMessage("Incorrect static object section in .smd input file-", "Error Message");
+					_surgAct->sendUserMessage("[Step 4/12] Incorrect static object section in .smd input file-", "Error Message");
 					return false;
 				}
 			}
 			// this is a staticTriangle, not elastic so put on graphics card and clean up
 			if ( _gl3w->loadStaticObjFile(path.c_str(), txIds, true) == NULL)
 			{
-				std::string errMsg = "Unable to load static object: " + path;
+				std::string errMsg = "[Step 4/12] Unable to load static object: " + path;
 				_surgAct->sendUserMessage(errMsg.c_str(), "Static OBJ Load Error");
 				return false;
 			}
@@ -161,12 +161,12 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	std::string deepBedFilepath;
 	deepBedFilepath.clear();
 	if ((oit = scnObj.find("dynamicObjects")) == scnObj.end()) {
-		_surgAct->sendUserMessage("No dynamic objects in this scene file-", "Error Message");
+		_surgAct->sendUserMessage("[Step 5/12] No dynamicObjects section in scene file-", "Error Message");
 		return false;
 	}
 	else {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("dynamicObjects section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 5/12] dynamicObjects section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object dynObj = oit->second.ToObject();
@@ -183,7 +183,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 					for (int i = 0; i < txArr.size(); ++i) {
 						txIds.push_back(txArr[i].ToInt());
 						if (!_gl3w->getTextures()->textureExists(txIds.back())) {
-							_surgAct->sendUserMessage("Missing texture or normal map in dynamic triangle section in .smd input file-", "Error Message");
+							_surgAct->sendUserMessage("[Step 5/12] Missing texture or normal map in dynamic triangle section in .smd input file-", "Error Message");
 							return false;
 						}
 					}
@@ -191,7 +191,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			}
 			_mt = _surgAct->getSurgGraphics()->getMaterialTriangles();
 			if (_mt->readObjFile(path.c_str())) {
-				std::string errMsg = "Unable to load dynamic object: " + path;
+				std::string errMsg = "[Step 5/12] Unable to load dynamic object: " + path;
 				_surgAct->sendUserMessage(errMsg.c_str(), "Dynamic OBJ Load Error");
 				return false;
 			}
@@ -215,13 +215,13 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			{
 				std::ifstream vsCheck(vtxShd.c_str());
 				if (!vsCheck.is_open()) {
-					std::string errMsg = "Vertex shader not found: " + vtxShd;
+					std::string errMsg = "[Step 6/12] Vertex shader not found: " + vtxShd;
 					_surgAct->sendUserMessage(errMsg.c_str(), "Shader Error");
 					return false;
 				}
 				std::ifstream fsCheck(frgShd.c_str());
 				if (!fsCheck.is_open()) {
-					std::string errMsg = "Fragment shader not found: " + frgShd;
+					std::string errMsg = "[Step 6/12] Fragment shader not found: " + frgShd;
 					_surgAct->sendUserMessage(errMsg.c_str(), "Shader Error");
 					return false;
 				}
@@ -248,7 +248,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	if ((oit = scnObj.find("fixedCollisionSets")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("fixedCollisionSets section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 7/12] fixedCollisionSets section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object hullObj = oit->second.ToObject();
@@ -267,7 +267,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	int nTetSizeLevels = 4, maxDimMegatetSubdivs = 31;  // Multires settings initial tet count 11,587 tets while old single res was0.5 million tets for cleft model.  Now loaded in properties below.
 	if ((oit = scnObj.find("tetrahedralProperties")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("tetrahedralProperties section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 8/12] tetrahedralProperties section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object hullObj = oit->second.ToObject();
@@ -339,7 +339,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	std::list<tetSubset> tetSubsets;
 	if ((oit = scnObj.find("tetrahedralSubsets")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("tetrahedralSubsets section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 9/12] tetrahedralSubsets section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object tetSubObj = oit->second.ToObject();
@@ -375,7 +375,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	// If no tissueRegions section is present, default region properties are loaded automatically.
 	if ((oit = scnObj.find("tissueRegions")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("tissueRegions section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 10/12] tissueRegions section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object regObj = oit->second.ToObject();
@@ -412,7 +412,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	// are used. This allows non-facial anatomies to define their own layer semantics.
 	if ((oit = scnObj.find("materialLayers")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
-			_surgAct->sendUserMessage("materialLayers section must be a JSON object in .smd file-", "Error Message");
+			_surgAct->sendUserMessage("[Step 11/12] materialLayers section must be a JSON object in .smd file-", "Error Message");
 			return false;
 		}
 		json::Object mlObj = oit->second.ToObject();

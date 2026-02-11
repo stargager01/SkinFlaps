@@ -836,7 +836,11 @@ void SurgicalSimGui::InstanceCleftGui()
 //						loadFile = modelFile;
 
 					if(!igSurgAct.loadScene(modelDirectory.c_str(), modelFile.c_str())) {
-						std::string errMsg = "The model file did not load successfully.\n\nDirectory: " + modelDirectory + "\nFile: " + modelFile;
+						std::string errMsg = "The model file did not load successfully.\n\n";
+						if (!user_message.empty()) {
+							errMsg += "Reason: " + user_message + "\n\n";
+						}
+						errMsg += "Directory: " + modelDirectory + "\nFile: " + modelFile;
 						sendUserMessage(errMsg.c_str(), "Model file Error");
 					}
 				}
