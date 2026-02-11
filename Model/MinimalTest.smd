@@ -1,0 +1,56 @@
+{
+    "sceneName" : "MinimalTest",
+    "dynamicObjects" : {
+        "MinimalTest.obj" : {
+            "textureMaps": [
+                1,
+                2,
+                1,
+                2
+            ]
+        }
+    },
+    "staticObjects" : {
+    },
+    "textureFiles" : {
+        "diffuse2.jpg" : 1,
+        "normal.jpg" : 2
+    },
+    "tetrahedralProperties" : {
+        "minStrain" : 0.7,
+        "maxStrain" : 1.4,
+        "lowTetWeight" : 300.0,
+        "highTetWeight" : 800.0,
+        "TJunctionWeight" : 50.0,
+        "collisionWeight": 40000.0,
+        "selfCollisionWeight" : 80000.0,
+        "fixedWeight" : 10000.0,
+        "periferalWeight" : 1000.0,
+        "hookWeight" : 800.0,
+        "sutureWeight" : 3000.0,
+        "autoSutureSpacing" : 0.10,
+        "nTetSizeLevels" : 3,
+        "maxDimMegatetSubdivs" : 20
+    },
+    "tetrahedralSubsets" : {
+    },
+    "tissueRegions" : {
+        "default" : {
+            "minStrain" : 0.5,
+            "maxStrain" : 2.0
+        }
+    },
+    "materialLayers" : {
+        "boundary" : 1,
+        "skinSurface" : 2,
+        "incisionEdge" : 3,
+        "subcutaneous" : 4,
+        "deepBed" : 5,
+        "muscle" : 6,
+        "periosteum" : 7,
+        "periosteumUndermined" : 8,
+        "undermineMarker" : 10
+    },
+    "fixedCollisionSets" : {
+    }
+}
