@@ -440,12 +440,13 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		if (mlObj.HasKey("boneSurface")) _materialLayers.boneSurface = mlObj["boneSurface"].ToInt();
 		if (mlObj.HasKey("arthroscopicPortal")) _materialLayers.arthroscopicPortal = mlObj["arthroscopicPortal"].ToInt();
 	}
-	try {
-		createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // now creating operable lattice on load
-	}
-	catch (const std::exception& e) {
-		std::string errMsg = "[Step 12/12] Physics lattice creation failed: ";
-		errMsg += e.what();
+	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // has internal try-catch
+	if (_surgAct->taskThreadError) {
+		std::string errMsg = "[Step 12/12] ";
+		{
+			std::lock_guard<std::mutex> lock(_surgAct->_errorMutex);
+			errMsg += _surgAct->taskThreadErrorStr;
+		}
 		_surgAct->sendUserMessage(errMsg.c_str(), "Physics Error");
 		return false;
 	}
@@ -565,11 +566,18 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 		_tetsModified = false;
 		_physicsPaused = false;
 	}  // end try block
+	catch (const std::exception& e) {
+		_surgAct->taskThreadError = true;
+		{
+			std::lock_guard<std::mutex> lock(_surgAct->_errorMutex);
+			_surgAct->taskThreadErrorStr = std::string("Couldn't create the initial physics lattice: ") + e.what();
+		}
+	}
 	catch (...) {
 		_surgAct->taskThreadError = true;
 		{
 			std::lock_guard<std::mutex> lock(_surgAct->_errorMutex);
-			_surgAct->taskThreadErrorStr = "Couldn't create the initial physics lattice. Probable model error.";
+			_surgAct->taskThreadErrorStr = "Couldn't create the initial physics lattice. Unknown error.";
 		}
 	}
 }
