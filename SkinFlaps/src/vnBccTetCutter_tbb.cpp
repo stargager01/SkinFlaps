@@ -134,7 +134,10 @@ void vnBccTetCutter_tbb::addNewMultiresIncision() {
 }
 
 void vnBccTetCutter_tbb::macrotetRecutCore() {
-	// reused for multiple incisions
+	std::ofstream dbgLog;
+	if (!_debugLogPath.empty())
+		dbgLog.open(_debugLogPath, std::ios::app);
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore start" << std::endl;
 	pack();  // removes all tets and nodes marked for deletion leaving only megatets
 	_vbt->_nMegatets = _vbt->_tetNodes.size();  // reduced after pack
 	_meganodeSize = _vbt->_nodeGridLoci.size();
@@ -358,14 +361,16 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 	eNodes.clear();
 
 	_vbt->_firstInteriorTet = _vbt->_tetNodes.size();
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore: fillInteriorMicroTets (vnCentroids=" << _vnCentroids.size() << " firstInteriorTet=" << _vbt->_firstInteriorTet << ")" << std::endl;
 	fillInteriorMicroTets(_vnCentroids);
-	// wed seams between macrotets and recut microtet regions with T junctions
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore: linkMicrotetsToMegatets (tetNodes=" << _vbt->_tetNodes.size() << " nMegatets=" << _vbt->_nMegatets << " nodeGridLoci=" << _vbt->_nodeGridLoci.size() << " firstNewExteriorNode=" << _firstNewExteriorNode << ")" << std::endl;
 	linkMicrotetsToMegatets();
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore: linkMicrotetsToMegatets done. Hashing tets." << std::endl;
 	_vbt->_tetHash.clear();
 	_vbt->_tetHash.reserve(_vbt->_tetNodes.size());
-	for (int n = _vbt->_tetNodes.size(), i = 0; i < n; ++i)  // firstInteriorTet
+	for (int n = _vbt->_tetNodes.size(), i = 0; i < n; ++i)
 		_vbt->_tetHash.insert(std::make_pair(_vbt->_tetCentroids[i], i));
-	// now reconnect stranded vertices to their new barycentric tet loci
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore: reconnecting vertices" << std::endl;
 	for (int n = _vbt->_vertexTets.size(), v = 0; v < n; ++v) {
 		// _vertexTetCentroids[v] already converted to lowest microtet centroid values
 		if (_vbt->_vertexTets[v] < -1)  // excised vertex
@@ -449,6 +454,7 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 	_vbt->_tetNodes.shrink_to_fit();
 	_vbt->_tetCentroids.shrink_to_fit();
 	_vbt->_nodeSpatialCoords = nullptr;  // this is owned by the physics system. Should be assigned after physics library creates it.
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore done. tetNodes=" << _vbt->_tetNodes.size() << " nodeGridLoci=" << _vbt->_nodeGridLoci.size() << std::endl;
 }
 
 void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrahedra* vbt, const int nLevels, const int maximumDimensionMacroSubdivs) {
@@ -882,7 +888,7 @@ void vnBccTetCutter_tbb::linkMicrotetsToMegatets(){
 			++offset;
 		}
 	}
-	_firstNewExteriorNode = nodeMap[_firstNewExteriorNode];
+	_firstNewExteriorNode = (_firstNewExteriorNode < (int)nodeMap.size()) ? nodeMap[_firstNewExteriorNode] : offset;
 	if (_firstNewExteriorNode < 0)
 		throw(std::logic_error("Program error in decimateInteriorMicroTets()\n"));
 	_vbt->_nodeGridLoci.resize(offset);
