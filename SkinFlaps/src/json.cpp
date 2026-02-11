@@ -945,6 +945,9 @@ static Value DeserializeArray(std::string& str, std::stack<StackDepthType>& dept
 	else
 		return Value();
 
+	// Trim inner whitespace so that "[ ]" or "[\n  ]" are recognized as empty arrays.
+	str = Trim(str);
+
 	// extract out all values from the array (remember, a value can also be an array or an object)
 	while (str.length() > 0)
 	{
@@ -1007,6 +1010,9 @@ static Value DeserializeObj(const std::string& _str, std::stack<StackDepthType>&
 		return Value();
 	else
 		str = str.substr(1, str.length() - 2);
+
+	// Trim inner whitespace so that "{ }" or "{\n  }" are recognized as empty objects.
+	str = Trim(str);
 
 	// Get all key/value pairs in this object...
 	while (str.length() > 0)
