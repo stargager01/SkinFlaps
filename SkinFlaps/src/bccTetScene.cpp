@@ -31,6 +31,12 @@
 bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName)
 {
 	_physicsPaused = true;
+	// Debug log file to diagnose loading crashes
+	std::string logPath(dataDirectory);
+	logPath.append("loadScene_debug.log");
+	std::ofstream dbgLog(logPath.c_str());
+	dbgLog << "loadScene start: " << dataDirectory << sceneFileName << std::endl;
+
 	std::string path(dataDirectory);
 	path.append(sceneFileName);
 	std::ifstream istr(path.c_str());
@@ -190,6 +196,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 				}
 			}
 			_mt = _surgAct->getSurgGraphics()->getMaterialTriangles();
+			dbgLog << "Step 5: reading OBJ: " << path << std::endl;
 			if (_mt->readObjFile(path.c_str())) {
 				std::string errMsg = "[Step 5/12] Unable to load dynamic object: " + path;
 				_surgAct->sendUserMessage(errMsg.c_str(), "Dynamic OBJ Load Error");
@@ -226,11 +233,17 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 					return false;
 				}
 			}
+			dbgLog << "Step 5: OBJ loaded. Triangles=" << _mt->numberOfTriangles() << " Vertices=" << _mt->numberOfVertices() << std::endl;
 			try {
+				dbgLog << "Step 6a: setTextureFilesCreateProgram" << std::endl;
 				_surgAct->getSurgGraphics()->setTextureFilesCreateProgram(txIds, vtxShd.c_str(), frgShd.c_str());  // openGL buffers created here
+				dbgLog << "Step 6b: setNewTopology" << std::endl;
 				_surgAct->getSurgGraphics()->setNewTopology();
+				dbgLog << "Step 6c: updatePositionsNormalsTangents" << std::endl;
 				_surgAct->getSurgGraphics()->updatePositionsNormalsTangents();
+				dbgLog << "Step 6d: computeLocalBounds" << std::endl;
 				_surgAct->getSurgGraphics()->computeLocalBounds();
+				dbgLog << "Step 6: graphics setup complete" << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::string errMsg = "[Step 6/12] Graphics setup failed: ";
@@ -440,7 +453,9 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		if (mlObj.HasKey("boneSurface")) _materialLayers.boneSurface = mlObj["boneSurface"].ToInt();
 		if (mlObj.HasKey("arthroscopicPortal")) _materialLayers.arthroscopicPortal = mlObj["arthroscopicPortal"].ToInt();
 	}
+	dbgLog << "Step 12: createNewPhysicsLattice start (nTetSizeLevels=" << nTetSizeLevels << " maxDimMegatetSubdivs=" << maxDimMegatetSubdivs << ")" << std::endl;
 	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // has internal try-catch
+	dbgLog << "Step 12: createNewPhysicsLattice done, error=" << _surgAct->taskThreadError << std::endl;
 	if (_surgAct->taskThreadError) {
 		std::string errMsg = "[Step 12/12] ";
 		{
@@ -451,18 +466,22 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		return false;
 	}
 	try {
+		dbgLog << "Post-lattice: setMaterialTriangles" << std::endl;
 		_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
+		dbgLog << "Post-lattice: setDeepBed " << deepBedFilepath << std::endl;
 		if (!_surgAct->getDeepCutPtr()->setDeepBed(_mt, deepBedFilepath.c_str(), &_vnTets)){
 			_surgAct->sendUserMessage("Undermine layer .bed file could not be found-", "Error Message");
 		}
+		dbgLog << "Post-lattice: tetSubsets" << std::endl;
 		if (!tetSubsets.empty()) {
 			for (auto& ts : tetSubsets)
 				_tetSubsets.createSubset(&_vnTets, ts.objFile, ts.lowTetWeight, ts.highTetWeight, ts.strainMin, ts.strainMax);
 		}
-		// Apply region-specific stretch subsets (those with OBJ files defining spatial extent).
-		// This uses the same tetSubset mechanism as tetrahedralSubsets above.
+		dbgLog << "Post-lattice: applyRegionSubsets" << std::endl;
 		applyRegionSubsets(dataDirectory);
+		dbgLog << "Post-lattice: frameScene" << std::endl;
 		_gl3w->frameScene(true);  // computes bounding spheres
+		dbgLog << "loadScene SUCCESS" << std::endl;
 	}
 	catch (const std::exception& e) {
 		std::string errMsg = "[Step 12/12] Post-lattice setup failed: ";
