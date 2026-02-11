@@ -226,10 +226,18 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 					return false;
 				}
 			}
-			_surgAct->getSurgGraphics()->setTextureFilesCreateProgram(txIds, vtxShd.c_str(), frgShd.c_str());  // openGL buffers created here
-			_surgAct->getSurgGraphics()->setNewTopology();
-			_surgAct->getSurgGraphics()->updatePositionsNormalsTangents();
-			_surgAct->getSurgGraphics()->computeLocalBounds();
+			try {
+				_surgAct->getSurgGraphics()->setTextureFilesCreateProgram(txIds, vtxShd.c_str(), frgShd.c_str());  // openGL buffers created here
+				_surgAct->getSurgGraphics()->setNewTopology();
+				_surgAct->getSurgGraphics()->updatePositionsNormalsTangents();
+				_surgAct->getSurgGraphics()->computeLocalBounds();
+			}
+			catch (const std::exception& e) {
+				std::string errMsg = "[Step 6/12] Graphics setup failed: ";
+				errMsg += e.what();
+				_surgAct->sendUserMessage(errMsg.c_str(), "Graphics Error");
+				return false;
+			}
 			path = suboit->first;
 			size_t pos = path.rfind(".obj");
 			path.erase(pos);
@@ -244,7 +252,8 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	}
 	if ((oit = scnObj.find("fixedGeometry")) != scnObj.end()) {
 		// now using fixedCollisionSets instead
-		throw(std::logic_error("Model .smd file sent to simulator uses an old fixedGeometry specifier that is no longer supported.\n"));
+		_surgAct->sendUserMessage("[Step 7/12] Model .smd file uses old fixedGeometry specifier that is no longer supported.", "Error Message");
+		return false;
 	}
 	if ((oit = scnObj.find("fixedCollisionSets")) != scnObj.end()) {
 		if (oit->second.GetType() != json::ObjectVal) {
@@ -431,19 +440,35 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		if (mlObj.HasKey("boneSurface")) _materialLayers.boneSurface = mlObj["boneSurface"].ToInt();
 		if (mlObj.HasKey("arthroscopicPortal")) _materialLayers.arthroscopicPortal = mlObj["arthroscopicPortal"].ToInt();
 	}
-	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // now creating operable lattice on load
-	_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
-	if (!_surgAct->getDeepCutPtr()->setDeepBed(_mt, deepBedFilepath.c_str(), &_vnTets)){
-		_surgAct->sendUserMessage("Undermine layer .bed file could not be found-", "Error Message");
+	try {
+		createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // now creating operable lattice on load
 	}
-	if (!tetSubsets.empty()) {
-		for (auto& ts : tetSubsets)
-			_tetSubsets.createSubset(&_vnTets, ts.objFile, ts.lowTetWeight, ts.highTetWeight, ts.strainMin, ts.strainMax);
+	catch (const std::exception& e) {
+		std::string errMsg = "[Step 12/12] Physics lattice creation failed: ";
+		errMsg += e.what();
+		_surgAct->sendUserMessage(errMsg.c_str(), "Physics Error");
+		return false;
 	}
-	// Apply region-specific stretch subsets (those with OBJ files defining spatial extent).
-	// This uses the same tetSubset mechanism as tetrahedralSubsets above.
-	applyRegionSubsets(dataDirectory);
-	_gl3w->frameScene(true);  // computes bounding spheres
+	try {
+		_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
+		if (!_surgAct->getDeepCutPtr()->setDeepBed(_mt, deepBedFilepath.c_str(), &_vnTets)){
+			_surgAct->sendUserMessage("Undermine layer .bed file could not be found-", "Error Message");
+		}
+		if (!tetSubsets.empty()) {
+			for (auto& ts : tetSubsets)
+				_tetSubsets.createSubset(&_vnTets, ts.objFile, ts.lowTetWeight, ts.highTetWeight, ts.strainMin, ts.strainMax);
+		}
+		// Apply region-specific stretch subsets (those with OBJ files defining spatial extent).
+		// This uses the same tetSubset mechanism as tetrahedralSubsets above.
+		applyRegionSubsets(dataDirectory);
+		_gl3w->frameScene(true);  // computes bounding spheres
+	}
+	catch (const std::exception& e) {
+		std::string errMsg = "[Step 12/12] Post-lattice setup failed: ";
+		errMsg += e.what();
+		_surgAct->sendUserMessage(errMsg.c_str(), "Setup Error");
+		return false;
+	}
 	return true;
 }
 

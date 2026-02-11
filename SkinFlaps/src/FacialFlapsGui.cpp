@@ -835,7 +835,21 @@ void SurgicalSimGui::InstanceCleftGui()
 //						loadDir = modelDirectory;
 //						loadFile = modelFile;
 
-					if(!igSurgAct.loadScene(modelDirectory.c_str(), modelFile.c_str())) {
+					bool loadOk = false;
+					try {
+						loadOk = igSurgAct.loadScene(modelDirectory.c_str(), modelFile.c_str());
+					}
+					catch (const std::exception& e) {
+						std::string errMsg = "Exception during scene loading:\n\n";
+						errMsg += e.what();
+						errMsg += "\n\nDirectory: " + modelDirectory + "\nFile: " + modelFile;
+						sendUserMessage(errMsg.c_str(), "Scene Load Exception");
+					}
+					catch (...) {
+						std::string errMsg = "Unknown exception during scene loading.\n\nDirectory: " + modelDirectory + "\nFile: " + modelFile;
+						sendUserMessage(errMsg.c_str(), "Scene Load Exception");
+					}
+					if (!loadOk) {
 						std::string errMsg = "The model file did not load successfully.\n\n";
 						if (!user_message.empty()) {
 							errMsg += "Reason: " + user_message + "\n\n";
