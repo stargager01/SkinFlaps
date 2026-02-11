@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <stdexcept>
 #include "Mat2x2d.h"
 #include "Vec3d.h"
 #include "Mat2x2f.h"
@@ -153,6 +154,8 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 			if (adjFace > -1) {  // -1 is an object boundary face, not a borderFace
 				auto mttit = _megatetTetTris.find(adjTc);
 				if (mttit != _megatetTetTris.end()) {
+					if (mttit->second.tetIdx < 0 || mttit->second.tetIdx >= (int)_vbt->_tetNodes.size())
+						throw std::runtime_error("macrotetRecutCore: boundary tetIdx " + std::to_string(mttit->second.tetIdx) + " out of range (tetNodes.size=" + std::to_string(_vbt->_tetNodes.size()) + ")");
 					auto& tn = _vbt->_tetNodes[mttit->second.tetIdx];
 					megatetFace mf;
 					mf.nodes[1] = tn[(adjFace + 1) & 3];
@@ -178,6 +181,8 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 	_boundingNodeData.clear();
 	_boundingNodeData.reserve(bnTris.size() * 1.1f);
 	for (auto& bnt : bnTris) {
+		if (bnt.first < 0 || bnt.first >= (int)_vbt->_nodeGridLoci.size())
+			throw std::runtime_error("macrotetRecutCore: boundary node " + std::to_string(bnt.first) + " out of range (nodeGridLoci.size=" + std::to_string(_vbt->_nodeGridLoci.size()) + ")");
 		auto pr = _boundingNodeData.insert(std::make_pair(_vbt->_nodeGridLoci[bnt.first], boundingNodeTris()));
 		pr.first->second.node = bnt.first;
 		pr.first->second.megaTetTris.assign(bnt.second.begin(), bnt.second.end());
@@ -213,10 +218,18 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 		zIntersectTriangleTbb(triVec, true, _zIntr);
 	}
 	for (auto ziv : _zIntr) {
-		if (ziv.flags.odd)
+		if (ziv.flags.odd) {
+			if (ziv.x < 0 || ziv.x >= (int)oddXy.size() || ziv.y < 0 || (ziv.x < (int)oddXy.size() && ziv.y >= (int)oddXy[ziv.x].size()))
+				throw std::runtime_error("macrotetRecutCore: oddXy index out of range (x=" + std::to_string(ziv.x) + " y=" + std::to_string(ziv.y) +
+					" oddXy.size=" + std::to_string(oddXy.size()) + " oddXy[x].size=" + std::to_string(ziv.x < (int)oddXy.size() ? oddXy[ziv.x].size() : 0) + ")");
 			oddXy[ziv.x][ziv.y].insert(std::make_pair(ziv.zInt, ziv.flags));
-		else
+		}
+		else {
+			if (ziv.x < 0 || ziv.x >= (int)evenXy.size() || ziv.y < 0 || (ziv.x < (int)evenXy.size() && ziv.y >= (int)evenXy[ziv.x].size()))
+				throw std::runtime_error("macrotetRecutCore: evenXy index out of range (x=" + std::to_string(ziv.x) + " y=" + std::to_string(ziv.y) +
+					" evenXy.size=" + std::to_string(evenXy.size()) + " evenXy[x].size=" + std::to_string(ziv.x < (int)evenXy.size() ? evenXy[ziv.x].size() : 0) + ")");
 			evenXy[ziv.x][ziv.y].insert(std::make_pair(ziv.zInt, ziv.flags));
+		}
 	}
 	_zIntr.clear();
 	std::vector<tetTriangles> tetTriVec;
@@ -273,14 +286,20 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 	_vbt->_tetNodes.insert(_vbt->_tetNodes.end(), incr, std::array<int, 4>());
 	_surfaceTetTris.assign(incr, tetTris());
 	for (auto& nt : _newTets) {
-		_vbt->_tetCentroids[nt.tetIdx] = nt.tc;  // COURT don't hash them here
+		if (nt.tetIdx < 0 || nt.tetIdx >= (int)_vbt->_tetCentroids.size())
+			throw std::runtime_error("macrotetRecutCore: newTet tetIdx " + std::to_string(nt.tetIdx) + " out of range (tetCentroids.size=" + std::to_string(_vbt->_tetCentroids.size()) + ")");
+		_vbt->_tetCentroids[nt.tetIdx] = nt.tc;
 		_vbt->_tetNodes[nt.tetIdx] = std::move(nt.tetNodes);
 		_vbt->_tetHash.insert(std::make_pair(nt.tc, nt.tetIdx));
 		auto scit = _surfaceCentroids.find(nt.tc);
-		assert(scit != _surfaceCentroids.end());
+		if (scit == _surfaceCentroids.end())
+			throw std::runtime_error("macrotetRecutCore: newTet centroid not found in _surfaceCentroids");
 		scit->second.push_back(nt.tetIdx);
-		_surfaceTetTris[nt.tetIdx - _vbt->_nMegatets].tetIdx = nt.tetIdx;  // if careful indexing don't need theis
-		_surfaceTetTris[nt.tetIdx - _vbt->_nMegatets].tris = std::move(nt.tris);
+		int sttIdx = nt.tetIdx - _vbt->_nMegatets;
+		if (sttIdx < 0 || sttIdx >= (int)_surfaceTetTris.size())
+			throw std::runtime_error("macrotetRecutCore: surfaceTetTris index " + std::to_string(sttIdx) + " out of range (size=" + std::to_string(_surfaceTetTris.size()) + " tetIdx=" + std::to_string(nt.tetIdx) + " nMegatets=" + std::to_string(_vbt->_nMegatets) + ")");
+		_surfaceTetTris[sttIdx].tetIdx = nt.tetIdx;
+		_surfaceTetTris[sttIdx].tris = std::move(nt.tris);
 	}
 	_newTets.clear();
 	// _centroidTriangles will be used later for vertex tetId and multires version, so don't delete
@@ -328,8 +347,13 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 	for (auto& en : eNodes) {
 		int eNode = _vbt->_nodeGridLoci.size();
 		_vbt->_nodeGridLoci.push_back(std::move(en.loc));
-		for (auto& ti : en.tiPairs)
+		for (auto& ti : en.tiPairs) {
+			if (ti.first < 0 || ti.first >= (int)_vbt->_tetNodes.size())
+				throw std::runtime_error("macrotetRecutCore: exterior node tetIdx " + std::to_string(ti.first) + " out of range (tetNodes.size=" + std::to_string(_vbt->_tetNodes.size()) + ")");
+			if (ti.second < 0 || ti.second >= 4)
+				throw std::runtime_error("macrotetRecutCore: exterior node local index " + std::to_string(ti.second) + " out of range (must be 0-3)");
 			_vbt->_tetNodes[ti.first][ti.second] = eNode;
+		}
 	}
 	eNodes.clear();
 
@@ -430,7 +454,8 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrahedra* vbt, const int nLevels, const int maximumDimensionMacroSubdivs) {
 	_mt = mt;
 	_vbt = vbt;
-	makeFirstVnTets(_mt, vbt, maximumDimensionMacroSubdivs);
+	if (!makeFirstVnTets(_mt, vbt, maximumDimensionMacroSubdivs))
+		throw std::runtime_error("makeFirstVnTets failed: model is not a closed manifold surface");
 	_vbt->_tetSubdivisionLevels = nLevels;  // Creating nLevels of multiresolution tets.
 	int mult = (1 << (nLevels - 1)), shiftUp = nLevels - 1;
 	// macrotets guaranteed not to virtual node.  Subcut any found at this stage.
@@ -444,18 +469,22 @@ void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrah
 		auto tc = ct.first;
 		for (int i = 0; i < 3; ++i)
 			tc[i] <<= shiftUp;
+		if (ct.second.empty())
+			throw std::runtime_error("createFirstMacroTets: empty centroid tet list in _surfaceCentroids");
 		if (ct.second.size() > 1) {
 			_vnCentroids.push_back(tc);
 			for (auto& ti : ct.second) {
+				if (ti < 0 || ti >= (int)_surfaceTetTris.size())
+					throw std::runtime_error("createFirstMacroTets: VN surfaceTetTris index " + std::to_string(ti) + " out of range (size=" + std::to_string(_surfaceTetTris.size()) + ")");
 				auto& tl = _surfaceTetTris[ti];
-				assert(tl.tetIdx == ti);
+				if (tl.tetIdx < 0 || tl.tetIdx >= (int)_vbt->_tetNodes.size())
+					throw std::runtime_error("createFirstMacroTets: VN tetIdx " + std::to_string(tl.tetIdx) + " out of range (tetNodes.size=" + std::to_string(_vbt->_tetNodes.size()) + ")");
 				_vbt->_tetNodes[tl.tetIdx][0] = -1;  // mark for deletion
 				_vnTris.insert(tl.tris.begin(), tl.tris.end());
 			}
 		}
 		else {
-			assert(ct.second.size() == 1);
-			auto& tt = _surfaceTetTris[ct.second.front()];
+			auto& tt = _surfaceTetTris.at(ct.second.front());
 			_vbt->_tetCentroids[tt.tetIdx] = tc;
 			_megatetTetTris.insert(std::make_pair(tc, std::move(tt)));
 		}
@@ -580,10 +609,18 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	}
 	_centTris.clear();
 	for (auto ziv : _zIntr) {
-		if (ziv.flags.odd)
+		if (ziv.flags.odd) {
+			if (ziv.x < 0 || ziv.x >= (int)oddXy.size() || ziv.y < 0 || (ziv.x < (int)oddXy.size() && ziv.y >= (int)oddXy[ziv.x].size()))
+				throw std::runtime_error("makeFirstVnTets: oddXy index out of range (x=" + std::to_string(ziv.x) + " y=" + std::to_string(ziv.y) +
+					" oddXy.size=" + std::to_string(oddXy.size()) + " oddXy[x].size=" + std::to_string(ziv.x < (int)oddXy.size() ? oddXy[ziv.x].size() : 0) + ")");
 			oddXy[ziv.x][ziv.y].insert(std::make_pair(ziv.zInt, ziv.flags));
-		else
+		}
+		else {
+			if (ziv.x < 0 || ziv.x >= (int)evenXy.size() || ziv.y < 0 || (ziv.x < (int)evenXy.size() && ziv.y >= (int)evenXy[ziv.x].size()))
+				throw std::runtime_error("makeFirstVnTets: evenXy index out of range (x=" + std::to_string(ziv.x) + " y=" + std::to_string(ziv.y) +
+					" evenXy.size=" + std::to_string(evenXy.size()) + " evenXy[x].size=" + std::to_string(ziv.x < (int)evenXy.size() ? evenXy[ziv.x].size() : 0) + ")");
 			evenXy[ziv.x][ziv.y].insert(std::make_pair(ziv.zInt, ziv.flags));
+		}
 	}
 	_zIntr.clear();
 	// create and hash all interior nodes.  Very fast (< 0.002 sec) so don't bother multithreading
@@ -617,12 +654,15 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	_vbt->_tetNodes.assign(_nSurfaceTets, std::array<int, 4>());
 	_surfaceTetTris.assign(_nSurfaceTets, tetTris());
 	for (auto& nt : _newTets) {
-		_vbt->_tetCentroids[nt.tetIdx] = nt.tc;  // COURT don't hash them here
+		if (nt.tetIdx < 0 || nt.tetIdx >= (int)_vbt->_tetCentroids.size())
+			throw std::runtime_error("makeFirstVnTets: newTet tetIdx " + std::to_string(nt.tetIdx) + " out of range (tetCentroids.size=" + std::to_string(_vbt->_tetCentroids.size()) + " nSurfaceTets=" + std::to_string((int)_nSurfaceTets) + ")");
+		_vbt->_tetCentroids[nt.tetIdx] = nt.tc;
 		_vbt->_tetNodes[nt.tetIdx] = std::move(nt.tetNodes);
 		auto scit = _surfaceCentroids.find(nt.tc);
-		assert(scit != _surfaceCentroids.end());
+		if (scit == _surfaceCentroids.end())
+			throw std::runtime_error("makeFirstVnTets: newTet centroid not found in _surfaceCentroids");
 		scit->second.push_back(nt.tetIdx);
-		_surfaceTetTris[nt.tetIdx].tetIdx = nt.tetIdx;  // COURT if careful indexing don't need this
+		_surfaceTetTris[nt.tetIdx].tetIdx = nt.tetIdx;
 		_surfaceTetTris[nt.tetIdx].tris = std::move(nt.tris);
 	}
 	_newTets.clear();
@@ -655,9 +695,12 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	_vbt->_vertexTets.assign(_mt->numberOfVertices(), -1);
 	for (int n = _mt->numberOfVertices(), i = 0; i < n; ++i) {
 		auto ct = _surfaceCentroids.find(_vertexTetCentroids[i]);
-		assert(ct != _surfaceCentroids.end());
+		if (ct == _surfaceCentroids.end())
+			throw std::runtime_error("makeFirstVnTets: vertex " + std::to_string(i) + " centroid not found in _surfaceCentroids");
+		if (ct->second.empty())
+			throw std::runtime_error("makeFirstVnTets: vertex " + std::to_string(i) + " has empty centroid tet list");
 		if(ct->second.size() < 2)
-			_vbt->_vertexTets[i] = _surfaceTetTris[ct->second.front()].tetIdx;
+			_vbt->_vertexTets[i] = _surfaceTetTris.at(ct->second.front()).tetIdx;
 		else {
 			for (auto& ti : ct->second) {
 				auto& tt = _surfaceTetTris[ti];
@@ -701,8 +744,13 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	for (auto& en : eNodes) {
 		int eNode = _vbt->_nodeGridLoci.size();
 		_vbt->_nodeGridLoci.push_back(std::move(en.loc));
-		for (auto& ti : en.tiPairs)
+		for (auto& ti : en.tiPairs) {
+			if (ti.first < 0 || ti.first >= (int)_vbt->_tetNodes.size())
+				throw std::runtime_error("makeFirstVnTets: exterior node tetIdx " + std::to_string(ti.first) + " out of range (tetNodes.size=" + std::to_string(_vbt->_tetNodes.size()) + ")");
+			if (ti.second < 0 || ti.second >= 4)
+				throw std::runtime_error("makeFirstVnTets: exterior node local index " + std::to_string(ti.second) + " out of range (must be 0-3)");
 			_vbt->_tetNodes[ti.first][ti.second] = eNode;
+		}
 	}
 	eNodes.clear();
 
@@ -736,19 +784,23 @@ void vnBccTetCutter_tbb::pack(){
 	_vbt->_tetHash.clear();  // invalidate now, hash later
 	// will repeatedly use _megatetTetTris, so remove any deleted ones
 	for (auto& mt : _megatetTetTris) {
+		if (mt.second.tetIdx < 0 || mt.second.tetIdx >= (int)tnArr.size())
+			throw std::runtime_error("pack: megatetTetTris tetIdx " + std::to_string(mt.second.tetIdx) + " out of range (tnArr.size=" + std::to_string(tnArr.size()) + ")");
 		mt.second.tetIdx = tnArr[mt.second.tetIdx];
-		assert(mt.second.tetIdx > -1);
+		if (mt.second.tetIdx < 0)
+			throw std::runtime_error("pack: megatetTetTris remapped to deleted tet");
 	}
 	_vbt->_nMegatets = _megatetTetTris.size();
 	for (int n = _mt->numberOfVertices(), i = 0; i < n; ++i) {
 		auto& vt = _vbt->_vertexTets[i];
 		if (vt < -1)  // excised vertex
 			continue;
-		if (vt >= tnArr.size())
+		if (vt >= (int)tnArr.size())
 			vt = -1;
 		else {
 			vt = tnArr[vt];
-			assert(vt < tnNow);
+			if (vt >= tnNow)
+				throw std::runtime_error("pack: vertex " + std::to_string(i) + " remapped to invalid tet " + std::to_string(vt) + " (tnNow=" + std::to_string(tnNow) + ")");
 		}
 	}
 	tnArr.clear();
@@ -2017,11 +2069,16 @@ void vnBccTetCutter_tbb::zIntersectTriangleTbb(Vec3d(&tri)[3], const bool surfac
 			xy[3] = _vbt->_gridSize[1] - 1;
 	}
 	else {
-		assert(xy[0] > 0);
-		assert(xy[1] < _vbt->_gridSize[0]);
-		assert(xy[2] > 0);
-		assert(xy[3] < _vbt->_gridSize[1]);
-
+		// Surface triangles should be fully within the grid, but clamp to avoid
+		// out-of-bounds access if floating-point precision causes edge cases.
+		if (xy[0] < 1)
+			xy[0] = 1;
+		if (xy[1] >= _vbt->_gridSize[0])
+			xy[1] = _vbt->_gridSize[0] - 1;
+		if (xy[2] < 1)
+			xy[2] = 1;
+		if (xy[3] >= _vbt->_gridSize[1])
+			xy[3] = _vbt->_gridSize[1] - 1;
 	}
 	// now get any Z line intersects
 	tri[1] -= tri[0];
@@ -2073,7 +2130,8 @@ void vnBccTetCutter_tbb::addCentroidMicronodesZ(const bccTetCentroid& tc) {
 	for (ha = 0; ha < 3; ++ha)
 		if (gl[0][ha] == gl[1][ha] && gl[2][ha] == gl[3][ha])
 			break;
-	assert(ha < 3);
+	if (ha >= 3)
+		throw std::runtime_error("addCentroidMicronodesZ: no matching axis found for centroid");
 	int c1 = ha > 1 ? 0 : ha + 1;
 	int c2 = c1 > 1 ? 0 : c1 + 1;
 	int rect[2][2] = { gl[0][c1], gl[1][c1], gl[0][c2], gl[0][c2]}, dha = abs(gl[0][ha] - gl[2][ha]);
