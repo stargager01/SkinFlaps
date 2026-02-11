@@ -542,6 +542,7 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 	try {
 		_tetsModified = false;
 		_tc.setRemapTetPhysics(&_rtp);
+		_tc.setDebugLogPath(_dataDirectory + "loadScene_debug.log");
 		dbgLog << "  Lattice: createFirstMacroTets start" << std::endl;
 		_tc.createFirstMacroTets(_mt, &_vnTets, nTetSizeLevels, maxDimMegatetSubdivs);
 		dbgLog << "  Lattice: createFirstMacroTets done. tets=" << _vnTets.tetNumber() << " nodes=" << _vnTets.nodeNumber() << std::endl;

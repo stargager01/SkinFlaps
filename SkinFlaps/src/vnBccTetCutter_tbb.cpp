@@ -452,10 +452,15 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 }
 
 void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrahedra* vbt, const int nLevels, const int maximumDimensionMacroSubdivs) {
+	std::ofstream dbgLog;
+	if (!_debugLogPath.empty())
+		dbgLog.open(_debugLogPath, std::ios::app);
 	_mt = mt;
 	_vbt = vbt;
+	if (dbgLog.is_open()) dbgLog << "  createFirstMacroTets start (nLevels=" << nLevels << " maxDimSubdivs=" << maximumDimensionMacroSubdivs << ")" << std::endl;
 	if (!makeFirstVnTets(_mt, vbt, maximumDimensionMacroSubdivs))
 		throw std::runtime_error("makeFirstVnTets failed: model is not a closed manifold surface");
+	if (dbgLog.is_open()) dbgLog << "  createFirstMacroTets: makeFirstVnTets done" << std::endl;
 	_vbt->_tetSubdivisionLevels = nLevels;  // Creating nLevels of multiresolution tets.
 	int mult = (1 << (nLevels - 1)), shiftUp = nLevels - 1;
 	// macrotets guaranteed not to virtual node.  Subcut any found at this stage.
@@ -491,6 +496,7 @@ void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrah
 	}
 	_surfaceCentroids.clear();
 	_surfaceTetTris.clear();
+	if (dbgLog.is_open()) dbgLog << "  createFirstMacroTets: surfaceCentroids processed. _vnCentroids=" << _vnCentroids.size() << " _vnTris=" << _vnTris.size() << " _megatetTetTris=" << _megatetTetTris.size() << std::endl;
 	// now add interior megatets not penetrated by a triangle
 	for (int n = _vbt->tetNumber(), i = _vbt->_firstInteriorTet; i < n; ++i) {
 		tetTris tt;
@@ -537,8 +543,8 @@ void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrah
 		});
 #endif
 	vnTriVec.clear();
-	_interiorNodes.clear();  // COURT perhaps keep this and delete vn tet interiors
-	// setup Z intersect arrays for finding interior nodes
+	_interiorNodes.clear();
+	if (dbgLog.is_open()) dbgLog << "  createFirstMacroTets: vnTri reprocess done. Setting up multires grid" << std::endl;
 	Vec3f maxMaterialCorner = (_vbt->_maxCorner - _vbt->_minCorner) * (float)_vbt->_unitSpacingInv;
 	for (int i = 0; i < 3; ++i)
 		_vbt->_gridSize[i] = 1 + (int)std::floor(maxMaterialCorner.xyz[i]);
@@ -552,15 +558,19 @@ void vnBccTetCutter_tbb::createFirstMacroTets(materialTriangles* mt, vnBccTetrah
 		evenXy[i].assign(gsy, std::multimap<double, zIntersectFlags>());  // 0th j always empty
 		oddXy[i].assign(gsy, std::multimap<double, zIntersectFlags>());
 	}
+	if (dbgLog.is_open()) dbgLog << "  createFirstMacroTets: macrotetRecutCore start (gridSize=[" << _vbt->_gridSize[0] << "," << _vbt->_gridSize[1] << "," << _vbt->_gridSize[2] << "])" << std::endl;
 	macrotetRecutCore();
+	if (dbgLog.is_open()) dbgLog << "  createFirstMacroTets done. tetNodes=" << _vbt->_tetNodes.size() << " nodeGridLoci=" << _vbt->_nodeGridLoci.size() << std::endl;
 }
 
 bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra* vbt, int maximumGridDimension)
 {  // initial creation of vbt based only on materialTriangles input amd maxGridDim.
+	std::ofstream dbgLog;
+	if (!_debugLogPath.empty())
+		dbgLog.open(_debugLogPath, std::ios::app);
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets start (maxGridDim=" << maximumGridDimension << " verts=" << mt->numberOfVertices() << " tris=" << mt->numberOfTriangles() << ")" << std::endl;
 	if (maximumGridDimension > 0x8ffe)
 		throw(std::logic_error("Maximum grid dimension requested must be less than 32K."));
-	// WARNING - no complete tests are done to check for non-self-intersecting closed manifold triangulated surface input!!
-	// This is essential. findAdjacentTriangles() is the closest test this routine provides.  Test externally.
 	_mt = mt;
 	_vbt = vbt;
 	_vbt->_nMegatets = 0;
@@ -571,9 +581,13 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	_vbt->_tetNodes.clear();
 	evenXy.clear();
 	oddXy.clear();
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: findAdjacentTriangles" << std::endl;
 	if (_mt->findAdjacentTriangles(true))	return false;
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: setupBccIntersectionStructures" << std::endl;
 	if (!setupBccIntersectionStructures(maximumGridDimension))
 		return false;
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: gridSize=[" << _vbt->_gridSize[0] << "," << _vbt->_gridSize[1] << "," << _vbt->_gridSize[2]
+		<< "] evenXy.size=" << evenXy.size() << " oddXy.size=" << oddXy.size() << std::endl;
 	_vbt->_tetSubdivisionLevels = 1;  // Not creating multiresolution tets.
 	// COURT 4x faster than single thread using tbb hash container requiring no reduction. tbb version ~30% faster than omp before reduction and reduction using critical section. tbb hash container very helpful.
 	auto procTri = [&](size_t i) {
@@ -597,6 +611,7 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 				procTri(i);
 		});
 #endif
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: procTri done. _centTris.size=" << _centTris.size() << " _zIntr.size=" << _zIntr.size() << std::endl;
 	std::vector<tetTriangles> tetTriVec;
 	tetTriVec.assign(_centTris.size(), tetTriangles());
 	_surfaceCentroids.clear();
@@ -608,6 +623,7 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 		tetTriVec[count++].tris = std::move(ctit->second);
 	}
 	_centTris.clear();
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: processing zIntr into oddXy/evenXy" << std::endl;
 	for (auto ziv : _zIntr) {
 		if (ziv.flags.odd) {
 			if (ziv.x < 0 || ziv.x >= (int)oddXy.size() || ziv.y < 0 || (ziv.x < (int)oddXy.size() && ziv.y >= (int)oddXy[ziv.x].size()))
@@ -623,19 +639,20 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 		}
 	}
 	_zIntr.clear();
-	// create and hash all interior nodes.  Very fast (< 0.002 sec) so don't bother multithreading
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: createInteriorNodes" << std::endl;
 	createInteriorNodes();
-	//	evenXy.clear(); oddXy.clear();  // am reusing these structures for remakeVnTets()
 	_interiorNodes.clear();  // only nodes created thus far are interior nodes
 	_interiorNodes.reserve(_vbt->_nodeGridLoci.size());
 	for (int n = _vbt->_nodeGridLoci.size(), j = 0; j < n; ++j)
 		_interiorNodes.insert(std::make_pair(_vbt->_nodeGridLoci[j], j));
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: interiorNodes=" << _interiorNodes.size() << " nodeGridLoci=" << _vbt->_nodeGridLoci.size() << std::endl;
 	_surfaceTetTris.clear();
-	_nSurfaceTets.store(0);  // this atomic must not step on any megatets that have already been created. In this routine there are none.  Atomic used to multithread next section
+	_nSurfaceTets.store(0);
 
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: getConnectedComponents (tetTriVec.size=" << tetTriVec.size() << ")" << std::endl;
 #ifdef _DEBUG
 	for (int i = 0; i < tetTriVec.size(); ++i)
-		getConnectedComponents(tetTriVec[i], _newTets, _ntsHash);  // for this centroid split its triangles into solid connected components
+		getConnectedComponents(tetTriVec[i], _newTets, _ntsHash);
 #else
 	tbb::parallel_for(
 		tbb::blocked_range<size_t>(0, tetTriVec.size()),
@@ -645,6 +662,7 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 		});
 #endif
 
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: getConnectedComponents done. _nSurfaceTets=" << (int)_nSurfaceTets << " _newTets.size=" << _newTets.size() << " _ntsHash.size=" << _ntsHash.size() << std::endl;
 	// Bug #2 determinism fix: canonicalize tet indices after parallel phase
 	std::unordered_map<int, int> tetRemap;
 	if (_deterministicMode)
@@ -653,6 +671,7 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	_vbt->_tetCentroids.assign(_nSurfaceTets, bccTetCentroid());
 	_vbt->_tetNodes.assign(_nSurfaceTets, std::array<int, 4>());
 	_surfaceTetTris.assign(_nSurfaceTets, tetTris());
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: assigning surface tets" << std::endl;
 	for (auto& nt : _newTets) {
 		if (nt.tetIdx < 0 || nt.tetIdx >= (int)_vbt->_tetCentroids.size())
 			throw std::runtime_error("makeFirstVnTets: newTet tetIdx " + std::to_string(nt.tetIdx) + " out of range (tetCentroids.size=" + std::to_string(_vbt->_tetCentroids.size()) + " nSurfaceTets=" + std::to_string((int)_nSurfaceTets) + ")");
@@ -690,6 +709,7 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 			}
 		}
 	}
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: assigning vertex tets (extNodeLocs=" << extNodeLocs.size() << ")" << std::endl;
 	// get tets where vertices reside
 	_vbt->_vertexTets.clear();
 	_vbt->_vertexTets.assign(_mt->numberOfVertices(), -1);
@@ -720,10 +740,12 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 				if (_vbt->_vertexTets[i] > -1)
 					break;
 			}
-			assert(_vbt->_vertexTets[i] > -1);
+			if (_vbt->_vertexTets[i] < 0)
+				throw std::runtime_error("makeFirstVnTets: vertex " + std::to_string(i) + " not assigned to any tet after multi-component search");
 		}
 	}
 
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: assignExteriorTetNodes" << std::endl;
 	oneapi::tbb::concurrent_vector<extNode> eNodes;
 #ifdef _DEBUG
 	for (int i = 0; i < extNodeLocs.size(); ++i)
@@ -741,6 +763,7 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	if (_deterministicMode)
 		canonicalizeExteriorNodes(eNodes);
 
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: linking exterior nodes (eNodes=" << eNodes.size() << ")" << std::endl;
 	for (auto& en : eNodes) {
 		int eNode = _vbt->_nodeGridLoci.size();
 		_vbt->_nodeGridLoci.push_back(std::move(en.loc));
@@ -755,14 +778,16 @@ bool vnBccTetCutter_tbb::makeFirstVnTets(materialTriangles* mt, vnBccTetrahedra*
 	eNodes.clear();
 
 	_vbt->_firstInteriorTet = _vbt->_tetNodes.size();
-	fillNonVnTetCenter();  // fast. Don't bother multithreading
-	_interiorNodes.clear();  // COURT perhaps keep this and delete vn tet interiors
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets: fillNonVnTetCenter (firstInteriorTet=" << _vbt->_firstInteriorTet << ")" << std::endl;
+	fillNonVnTetCenter();
+	_interiorNodes.clear();
 	_vbt->_tetNodes.shrink_to_fit();
 	_vbt->_tetCentroids.shrink_to_fit();
 	_vbt->_tetHash.clear();
 	_vbt->_tetHash.reserve(_vbt->_tetCentroids.size());
 	for (int n = _vbt->_tetCentroids.size(), i = 0; i < n; ++i)
 		_vbt->_tetHash.insert(std::make_pair(_vbt->_tetCentroids[i], i));
+	if (dbgLog.is_open()) dbgLog << "    makeFirstVnTets done. tetNodes=" << _vbt->_tetNodes.size() << " tetCentroids=" << _vbt->_tetCentroids.size() << " nodeGridLoci=" << _vbt->_nodeGridLoci.size() << std::endl;
 	return true;
 }
 

@@ -6,6 +6,7 @@
 #include <Vec3d.h>
 #include "boundingBox.h"
 #include <list>
+#include <string>
 #include <vector>
 #include <set>
 #include <map>
@@ -32,6 +33,7 @@ public:
 	inline void setRemapTetPhysics(remapTetPhysics* rtp) { _rtp = rtp; }  // for use in surgical simulation project to reset spatial coords after a topo change.  Can be ignored elsewhere if desired.
 	inline void setDeterministicMode(bool enable) { _deterministicMode = enable; }
 	inline bool getDeterministicMode() const { return _deterministicMode; }
+	inline void setDebugLogPath(const std::string& path) { _debugLogPath = path; }
 	vnBccTetCutter_tbb(void) { _rtp = nullptr; _deterministicMode = true; }
 	~vnBccTetCutter_tbb(void){}
 
@@ -39,6 +41,7 @@ private:
 	materialTriangles* _mt;
 	vnBccTetrahedra* _vbt;
 	remapTetPhysics* _rtp;
+	std::string _debugLogPath;
 	std::vector<Vec3f> _vMatCoords;  // material coordinates of surface vertices
 
 	std::unordered_set<int> _vnTris;
