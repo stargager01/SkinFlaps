@@ -411,7 +411,11 @@ void SurgicalSimGui::getFileName(const char *startPath, const char *fileFilterSu
 		dialogTitle = "Please select a directory for your blend shapes -";
 		suffix.clear();
 		ImGuiFileDialog::Instance()->SetFileStyle(IGFD_FileStyleByTypeDir, "", ImVec4(1.0f, 0.4f, 0.0f, 1.0f));
+#ifdef WIN32
 		ImGuiFileDialog::Instance()->OpenDialog("FileDialogKey", dialogTitle.c_str(), nullptr, "C:\\");
+#else
+		ImGuiFileDialog::Instance()->OpenDialog("FileDialogKey", dialogTitle.c_str(), nullptr, "/");
+#endif
 		return;
 	}
 	else if (mustExist) {  // load dialog
@@ -559,8 +563,15 @@ void SurgicalSimGui::setDefaultDirectories() {
 			modelDirectory.assign(buff);
 			size_t pos = modelDirectory.rfind("Build");
 			if (pos == std::string::npos) {  // not part of program build. Use install dir.
+#ifdef WIN32
 				historyDirectory = "C:\\Users\\SkinFlaps";
 				modelDirectory = "C:\\ProgramData\\SkinFlaps";
+#else
+				const char* home = getenv("HOME");
+				std::string homeDir = home ? std::string(home) : std::string("/tmp");
+				historyDirectory = homeDir + "/SkinFlaps";
+				modelDirectory = homeDir + "/SkinFlaps";
+#endif
 			}
 			else {  // doing program building and testing
 				std::string projectFolder = "SkinFlaps";
@@ -568,8 +579,8 @@ void SurgicalSimGui::setDefaultDirectories() {
 				modelDirectory.erase(modelDirectory.begin() + pos + projectFolder.size(), modelDirectory.end());
 				historyDirectory = modelDirectory;
 			}
-			modelDirectory.append("\\Model\\");
-			historyDirectory.append("\\History\\");
+			modelDirectory.append(PATH_SEP "Model" PATH_SEP);
+			historyDirectory.append(PATH_SEP "History" PATH_SEP);
 		}
 		igSurgAct.setModelDirectory(modelDirectory.c_str());
 		igSurgAct.setHistoryDirectory(historyDirectory.c_str());
@@ -798,7 +809,7 @@ void SurgicalSimGui::InstanceCleftGui()
 					}
 					else {
 						historyDirectory = ImGuiFileDialog::Instance()->GetCurrentPath();
-						historyDirectory.append("\\");
+						historyDirectory.append(PATH_SEP);
 						historyFile = inFile;
 						std::string title("Skin Flaps Simulator playing - ");
 						title.append(historyFile);
@@ -815,7 +826,7 @@ void SurgicalSimGui::InstanceCleftGui()
 				else {
 					assert(inFile.rfind("smd") < inFile.size());
 					modelDirectory = ImGuiFileDialog::Instance()->GetCurrentPath();
-					modelDirectory.append("\\");
+					modelDirectory.append(PATH_SEP);
 					modelFile = inFile;
 					std::string title("Skin Flaps Simulator Model is - ");
 					title.append(modelFile);
@@ -824,15 +835,17 @@ void SurgicalSimGui::InstanceCleftGui()
 //						loadDir = modelDirectory;
 //						loadFile = modelFile;
 
-					if(!igSurgAct.loadScene(modelDirectory.c_str(), modelFile.c_str()))
-						sendUserMessage("The model file did not load successfully.", "Model file Error");
+					if(!igSurgAct.loadScene(modelDirectory.c_str(), modelFile.c_str())) {
+						std::string errMsg = "The model file did not load successfully.\n\nDirectory: " + modelDirectory + "\nFile: " + modelFile;
+						sendUserMessage(errMsg.c_str(), "Model file Error");
+					}
 				}
 			}
 			else if (FileDlgMode < 2) {  // write op
 				std::string outFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
 				if (outFile.rfind(".hst") < outFile.size()) {
 					historyDirectory = ImGuiFileDialog::Instance()->GetCurrentPath();
-					historyDirectory.append("\\");
+					historyDirectory.append(PATH_SEP);
 					historyFile = outFile;
 					std::string fullPath = historyDirectory;
 					fullPath.append(historyFile);
@@ -852,7 +865,7 @@ void SurgicalSimGui::InstanceCleftGui()
 			}
 			else{  // find/create blend shape directory before saving blend shape file
 				objDirectory = ImGuiFileDialog::Instance()->GetCurrentPath();
-				objDirectory.append("\\");
+				objDirectory.append(PATH_SEP);
 				ImGuiFileDialog::Instance()->Close();
 				getFileName(objDirectory.c_str(), ".obj", objDirectory, false, false);
 				return;

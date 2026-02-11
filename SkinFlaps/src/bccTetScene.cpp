@@ -104,10 +104,23 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		for (suboit = txObj.begin(); suboit != txObj.end(); ++suboit) {
 			path = dataDirectory + suboit->first;
 			_referencedTextureFiles.push_back(suboit->first);
+			// Check file existence before attempting to load
+			{
+				std::ifstream texCheck(path.c_str());
+				if (!texCheck.is_open()) {
+					std::string errMsg = "Texture file not found: " + path +
+						"\nDirectory: " + std::string(dataDirectory) +
+						"\nFilename: " + suboit->first;
+					_surgAct->sendUserMessage(errMsg.c_str(), "Texture Load Error");
+					return false;
+				}
+			}
 			GLuint txNow = _gl3w->getTextures()->loadTexture(suboit->second.ToInt(), path.c_str());
-			if (txNow > 0xfffffffe) {
-				path = "Unable to load bitmap .bmp input file: " + path;
-				_surgAct->sendUserMessage(path.c_str(), "Error Message");
+			if (txNow > 0xfffffffe || txNow == 0) {
+				std::string errMsg = "Failed to load texture: " + path;
+				if (txNow == 0)
+					errMsg += "\n(Unsupported format or duplicate texture ID)";
+				_surgAct->sendUserMessage(errMsg.c_str(), "Texture Load Error");
 				return false;
 			}
 			int txNum = suboit->second.ToInt();
@@ -139,7 +152,8 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			// this is a staticTriangle, not elastic so put on graphics card and clean up
 			if ( _gl3w->loadStaticObjFile(path.c_str(), txIds, true) == NULL)
 			{
-				_surgAct->sendUserMessage("Unable to load fixed triangle .obj input file-", "Error Message");
+				std::string errMsg = "Unable to load static object: " + path;
+				_surgAct->sendUserMessage(errMsg.c_str(), "Static OBJ Load Error");
 				return false;
 			}
 		}
@@ -177,7 +191,8 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			}
 			_mt = _surgAct->getSurgGraphics()->getMaterialTriangles();
 			if (_mt->readObjFile(path.c_str())) {
-				_surgAct->sendUserMessage("Unable to load fixed materialTriangle .obj input file-", "Error Message");
+				std::string errMsg = "Unable to load dynamic object: " + path;
+				_surgAct->sendUserMessage(errMsg.c_str(), "Dynamic OBJ Load Error");
 				return false;
 			}
 			// same material texture seams processed in graphics,
@@ -195,6 +210,21 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			}
 			else {
 				frgShd.append("mtFragmentShader.txt");
+			}
+			// Verify shader files exist before attempting to compile
+			{
+				std::ifstream vsCheck(vtxShd.c_str());
+				if (!vsCheck.is_open()) {
+					std::string errMsg = "Vertex shader not found: " + vtxShd;
+					_surgAct->sendUserMessage(errMsg.c_str(), "Shader Error");
+					return false;
+				}
+				std::ifstream fsCheck(frgShd.c_str());
+				if (!fsCheck.is_open()) {
+					std::string errMsg = "Fragment shader not found: " + frgShd;
+					_surgAct->sendUserMessage(errMsg.c_str(), "Shader Error");
+					return false;
+				}
 			}
 			_surgAct->getSurgGraphics()->setTextureFilesCreateProgram(txIds, vtxShd.c_str(), frgShd.c_str());  // openGL buffers created here
 			_surgAct->getSurgGraphics()->setNewTopology();
@@ -241,7 +271,7 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 			return false;
 		}
 		json::Object hullObj = oit->second.ToObject();
-		float lowTetWeight, highTetWeight, TJunctionWeight, strainMin, strainMax, collisionWeight, fixedWeight, periferalWeight, hookWeight, sutureWeight, autoSutureSpacing, selfCollisionWeight;
+		float lowTetWeight = 300.0f, highTetWeight = 800.0f, TJunctionWeight = 50.0f, strainMin = 0.7f, strainMax = 1.4f, collisionWeight = 40000.0f, fixedWeight = 10000.0f, periferalWeight = 1000.0f, hookWeight = 800.0f, sutureWeight = 3000.0f, autoSutureSpacing = 0.10f, selfCollisionWeight = 80000.0f;
 		for (suboit = hullObj.begin(); suboit != hullObj.end(); ++suboit) {
 			if (suboit->first == "minStrain")
 				strainMin = suboit->second.ToFloat();
@@ -273,6 +303,22 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 				nTetSizeLevels = suboit->second.ToInt();
 			else
 				_surgAct->sendUserMessage("Unknown tetrahedral property in scene file-", "File Error Message");
+		}
+	// Validate critical parameter ranges
+		if (strainMin <= 0.0f || strainMax <= strainMin) {
+			std::string errMsg = "Invalid strain range in tetrahedralProperties: minStrain=" +
+				std::to_string(strainMin) + " maxStrain=" + std::to_string(strainMax);
+			_surgAct->sendUserMessage(errMsg.c_str(), "Parameter Warning");
+		}
+		if (nTetSizeLevels < 1 || nTetSizeLevels > 8) {
+			std::string errMsg = "nTetSizeLevels=" + std::to_string(nTetSizeLevels) + " out of expected range [1,8]. Using default.";
+			_surgAct->sendUserMessage(errMsg.c_str(), "Parameter Warning");
+			nTetSizeLevels = 4;
+		}
+		if (maxDimMegatetSubdivs < 10 || maxDimMegatetSubdivs > 100) {
+			std::string errMsg = "maxDimMegatetSubdivs=" + std::to_string(maxDimMegatetSubdivs) + " out of expected range [10,100]. Using default.";
+			_surgAct->sendUserMessage(errMsg.c_str(), "Parameter Warning");
+			maxDimMegatetSubdivs = 34;
 		}
 		_ptp.setTetProperties(lowTetWeight, highTetWeight, TJunctionWeight, strainMin, strainMax, collisionWeight, selfCollisionWeight, fixedWeight, periferalWeight);
 		_ptp.setHookSutureWeights(hookWeight, sutureWeight, 0.3f);

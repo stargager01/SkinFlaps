@@ -9,9 +9,13 @@
 #ifdef WIN32
 #include <direct.h>
 #define GetCurrentDir _getcwd
+#define PATH_SEP "\\"
+#define PATH_SEP_CHAR '\\'
 #else
 #include <unistd.h>
 #define GetCurrentDir getcwd
+#define PATH_SEP "/"
+#define PATH_SEP_CHAR '/'
 #endif
 
 //#define STB_IMAGE_IMPLEMENTATION
