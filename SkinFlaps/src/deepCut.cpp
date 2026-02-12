@@ -1,4 +1,5 @@
 ﻿#include <assert.h>
+#include <stdexcept>
 #include <iostream>
 #include "Vec2d.h"
 #include "Vec3f.h"
@@ -64,7 +65,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 		int post = rit->first.first;
 		auto& ti = _deepPosts[post].triIntersects;
 		int i0 = rit->first.second + 1;
-		assert(i0 == 1);
+		if (!(i0 == 1)) throw std::runtime_error("deepCut line 68: i0 == 1");
 		++rit;
 		if (rit->first.first != post) {
 			if (_diagnosticLog)
@@ -146,7 +147,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 			int tet = _vbt->parametricTriangleTet(ri.triangle, uv, gridLocus);
 			_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->_tetCentroids[tet], bw);
 			ri.deepVert = _mt->addNewVertexInMidTriangle(ri.triangle, uv);
-			assert(ri.deepVert == _vbt->_vertexTets.size());
+			if (!(ri.deepVert == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 150: ri.deepVert == _vbt->_vertexTets.size()");
 			_vbt->_vertexTets.push_back(tet);
 			_vbt->_barycentricWeights.push_back(bw);
 		}
@@ -249,7 +250,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 			surfacePolyLines.push_back(std::list <int>());
 	}
 	while(!rtiHits.empty()){ // now do any closed loops that remain
-		assert(surfacePolyLines.back().empty());
+		if (!(surfacePolyLines.back().empty())) throw std::runtime_error("deepCut line 253: surfacePolyLines.back().empty()");
 		setTopLoopBegin = true;
 		rhit = rtiHits.begin();
 		int firstPost = rhit->first.first, firstIdx = rhit->first.second;
@@ -289,7 +290,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 				pr.first->second.pos = vert;
 			else {  // all deep vertices so don't add to _deepBed
 				pr.first->second.pos = cloneVertex(vert);
-				assert(pr.first->second.pos == _vbt->_vertexTets.size());
+				if (!(pr.first->second.pos == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 293: pr.first->second.pos == _vbt->_vertexTets.size()");
 				_vbt->_vertexTets.push_back(_vbt->_vertexTets[vert]);
 				_vbt->_barycentricWeights.push_back(_vbt->_barycentricWeights[vert]);
 			}
@@ -335,7 +336,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 				if (k < 3)
 					break;
 			}
-			assert(adj != 0xffffffff);
+			if (!(adj != 0xffffffff)) throw std::runtime_error("deepCut line 339: adj != 0xffffffff");
 			++vit;
 			while (vit != sp.end()) {
 				int loopV = -1;
@@ -345,7 +346,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 					topAdj = _mt->triAdjs(botAdj >> 2)[1];
 					if ((topAdj >> 2) + 1 != (botAdj >> 2)) {
 						topAdj = _mt->triAdjs(botAdj >> 2)[2];
-						assert((topAdj >> 2) + 1 == (botAdj >> 2));
+						if (!((topAdj >> 2) + 1 == (botAdj >> 2))) throw std::runtime_error("deepCut line 349: (topAdj >> 2) + 1 == (botAdj >> 2)");
 					}
 					tr = _mt->triangleVertices(topAdj >> 2);
 					int k;
@@ -437,7 +438,7 @@ void deepCut::getDeepCutLine(rayTriangleIntersect &top, rayTriangleIntersect &bo
 
 		// COURT this was commented out.
 		//  
-		assert(_vbt->_vertexTets.size() == top.dcl.back());
+		if (!(_vbt->_vertexTets.size() == top.dcl.back())) throw std::runtime_error("deepCut line 441: _vbt->_vertexTets.size() == top.dcl.back()");
 		_vbt->_vertexTets.push_back(tet);
 		_vbt->_barycentricWeights.push_back(baryWeight);
 	}
@@ -620,7 +621,7 @@ bool deepCut::deepCutQuad(int postNum) {
 	};
 	for (int i = 0; i != interPostIdx; ) {
 		if (i & 1){
-			assert(!pti1[i].scl.deepVertsTris.empty());
+			if (!(!pti1[i].scl.deepVertsTris.empty())) throw std::runtime_error("deepCut line 624: !pti1[i].scl.deepVertsTris.empty()");
 			tmp.assign(pti1[i].scl.deepVertsTris.begin(), pti1[i].scl.deepVertsTris.end());
 			tmpUV.assign(pti1[i].scl.deepUVs.begin(), pti1[i].scl.deepUVs.end());
 			postTx.set(1.0, getPostV(tmp.front(), false));
@@ -628,7 +629,7 @@ bool deepCut::deepCutQuad(int postNum) {
 			postTx.Y = getPostV(tmp.back(), false);
 			tmpUV.back() = postTx;
 			if (!lastDeep) {
-				assert(poly.back() == tmp.front());
+				if (!(poly.back() == tmp.front())) throw std::runtime_error("deepCut line 632: poly.back() == tmp.front()");
 				poly.pop_back();
 				polyUV.pop_back();
 			}
@@ -668,7 +669,7 @@ bool deepCut::deepCutQuad(int postNum) {
 	tmpUV.back() = postTx;
 	interPostIdx = pti1[interPostIdx].scl.rtiIndexTo;
 	if (!lastDeep) {
-		assert(poly.back() == tmp.front());
+		if (!(poly.back() == tmp.front())) throw std::runtime_error("deepCut line 672: poly.back() == tmp.front()");
 		poly.pop_back();
 		polyUV.pop_back();
 	}
@@ -677,7 +678,7 @@ bool deepCut::deepCutQuad(int postNum) {
 	lastDeep = false;
 	for (int i = interPostIdx; i != 0; ) {
 		if ((i & 1) < 1) {
-			assert(!pti0[i].scl.deepVertsTris.empty());
+			if (!(!pti0[i].scl.deepVertsTris.empty())) throw std::runtime_error("deepCut line 681: !pti0[i].scl.deepVertsTris.empty()");
 			tmp.assign(pti0[i].scl.deepVertsTris.begin(), pti0[i].scl.deepVertsTris.end());
 			tmpUV.assign(pti0[i].scl.deepUVs.begin(), pti0[i].scl.deepUVs.end());
 			postTx.X = 0.0;
@@ -686,7 +687,7 @@ bool deepCut::deepCutQuad(int postNum) {
 			postTx.Y = getPostV(tmp.back(), true);
 			tmpUV.back() = postTx;
 			if (!lastDeep) {
-				assert(poly.back() == tmp.front());
+				if (!(poly.back() == tmp.front())) throw std::runtime_error("deepCut line 690: poly.back() == tmp.front()");
 				poly.pop_back();
 				polyUV.pop_back();
 			}
@@ -806,7 +807,7 @@ bool deepCut::deepCutEndPlane(int endPlane) {
 				polyUV.splice(polyUV.end(), tmpUV);
 			}
 		}
-		assert(polyVerts.back() != polyVerts.front());
+		if (!(polyVerts.back() != polyVerts.front())) throw std::runtime_error("deepCut line 810: polyVerts.back() != polyVerts.front()");
 		polyVerts.reverse(); // to make CCW
 		polyUV.reverse();
 		makePolygonTriangles(polyVerts, polyUV, nullptr, &_endPlanes[endPlane], _endPlanes[endPlane].quadTriangles);
@@ -910,7 +911,7 @@ void deepCut::makePolygonTriangles(const std::list<int> &polyVerts, const std::l
 					continue;
 				intPt.newV = _mt->addVertices(1);
 				_mt->setVertexCoordinate(intPt.newV, N.xyz);  // texture not set
-				assert(_vbt->_vertexTets.size() == intPt.newV);
+				if (!(_vbt->_vertexTets.size() == intPt.newV)) throw std::runtime_error("deepCut line 914: _vbt->_vertexTets.size() == intPt.newV");
 				_vbt->_vertexTets.push_back(tet);
 				_vbt->_barycentricWeights.push_back(baryWeight);
 				intPt.uv = V2;
@@ -1107,7 +1108,7 @@ void deepCut::getDeepPosts(std::vector<Vec3f>& xyz, std::vector<Vec3f>& nrm) {
 
 int deepCut::preventPreviousCrossover(const int postNum) {
 	// assumes all posts have previous surface connections
-	assert(postNum > 0);  // already checked in calling routine
+	if (postNum < 1) throw std::runtime_error("deepCut line 1111: postNum must be > 0");
 	deepPost* dp = &_deepPosts[postNum];
 	Vec3d P = dp->triIntersects[0].intersect, N;;
 	int k;
@@ -1253,7 +1254,7 @@ int deepCut::addDeepPost(const int triangle, const float (&uv)[2], const Vec3d& 
 }
 
 bool deepCut::topConnectToPreviousPost(int postNum) {
-	assert(postNum > 0);
+	if (!(postNum > 0)) throw std::runtime_error("deepCut line 1257: postNum > 0");
 	double lowV;
 	if (surfacePath(_deepPosts[postNum - 1].triIntersects[0], _deepPosts[postNum].triIntersects[0], false, lowV) == DBL_MAX)
 		return false;
@@ -1296,9 +1297,9 @@ bool deepCut::deepConnectToPreviousPost(int postNum) {
 
 /* bool deepCut::connectToPreviousPost(int postNum) {
 
-	assert(false);  // no longer used
+	throw std::runtime_error("deepCut line 1300: unreachable code reached (no longer used)");  // no longer used
 
-	assert(postNum > 0);
+	if (!(postNum > 0)) throw std::runtime_error("deepCut line 1302: postNum > 0");
 	double lowV;
 	if (surfacePath(_deepPosts[postNum - 1].triIntersects[0], _deepPosts[postNum].triIntersects[0], false, lowV) == DBL_MAX)
 		return false;
@@ -1414,7 +1415,7 @@ bool deepCut::rayIntersectMaterialTriangles(const Vec3d& rayStart, const Vec3d& 
 	intersects.reserve(rtiMap.size());
 	int intsctIndex = 0;
 	while (rit != rtiMap.end()) {  // create pairs enclosing solids, but allow minor soft-soft collisions
-		assert (rit->second.solidDown == true);
+		if (rit->second.solidDown != true) throw std::runtime_error("deepCut line 1418: solidDown must be true");
 		rit->second.rayIndex = intsctIndex++;
 		intersects.push_back(rit->second);
 		rit = rtiMap.erase(rit);
@@ -1734,7 +1735,7 @@ void deepCut::findCutInteriorHoles(const bilinearPatch* blp, const endPlane* ep,
 			throw(std::logic_error("Program error in deepCut hole finder."));
 		_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->_tetCentroids[tet], bw);
 		int ret = _mt->addNewVertexInMidTriangle(te >> 2, uv.xy);
-		assert(ret == _vbt->_vertexTets.size());
+		if (!(ret == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 1738: ret == _vbt->_vertexTets.size()");
 		_vbt->_vertexTets.push_back(tet);
 		_vbt->_barycentricWeights.push_back(bw);
 		return ret;
@@ -1826,7 +1827,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 				ep = nullptr;
 			else {
 				ep = &_endPlanes[0];  // endPlaneCut = 1;
-				assert(_endPlanes[0].P.X != DBL_MAX);
+				if (!(_endPlanes[0].P.X != DBL_MAX)) throw std::runtime_error("deepCut line 1830: _endPlanes[0].P.X != DBL_MAX");
 			}
 		}
 		if (from.postNum == _deepPosts.size() - 1) {
@@ -1834,7 +1835,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 				ep = nullptr;
 			else {
 				ep = &_endPlanes[1];  // endPlaneCut = 2;
-				assert(ep->P.X != DBL_MAX);
+				if (!(ep->P.X != DBL_MAX)) throw std::runtime_error("deepCut line 1838: ep->P.X != DBL_MAX");
 			}
 		}
 	}
@@ -1881,14 +1882,14 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 		if (intersectLevel > _deepPosts[to.postNum].triIntersects.size() - 1)
 			intersectLevel = _deepPosts[to.postNum].triIntersects.size() - 1;
 		if (from.postNum < to.postNum) {
-			assert((from.rayIndex & 1) < 1);
+			if (!((from.rayIndex & 1) < 1)) throw std::runtime_error("deepCut line 1885: (from.rayIndex & 1) < 1");
 			P01 = _deepPosts[from.postNum].triIntersects.front().intersect;
 			P11 = _deepPosts[to.postNum].triIntersects.front().intersect;
 			P00 = _deepPosts[from.postNum].triIntersects[intersectLevel].intersect;
 			P10 = _deepPosts[to.postNum].triIntersects[intersectLevel].intersect;
 		}
 		else if (from.postNum > to.postNum) {
-			assert(from.rayIndex & 1);
+			if (!(from.rayIndex & 1)) throw std::runtime_error("deepCut line 1892: from.rayIndex & 1");
 			P10 = _deepPosts[from.postNum].triIntersects[intersectLevel].intersect;
 			P00 = _deepPosts[to.postNum].triIntersects[intersectLevel].intersect;
 			P11 = _deepPosts[from.postNum].triIntersects.front().intersect;
@@ -1905,7 +1906,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 			}
 			else {
 				if (from.rayIndex & 1) {  // other open end case.  COURT - again no longer allowed
-					assert(from.postNum < 1);
+					if (!(from.postNum < 1)) throw std::runtime_error("deepCut line 1909: from.postNum < 1");
 				}
 				if (intersectLevel > _deepPosts[from.postNum + 1].triIntersects.size() - 1)
 					intersectLevel = _deepPosts[from.postNum + 1].triIntersects.size() - 1;
@@ -1926,7 +1927,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 			}
 			else {
 				if (to.rayIndex & 1) {  // other open end case
-					assert(from.postNum == _deepPosts.size() - 1);
+					if (!(from.postNum == _deepPosts.size() - 1)) throw std::runtime_error("deepCut line 1930: from.postNum == _deepPosts.size() - 1");
 				}
 				if (intersectLevel > _deepPosts[from.postNum - 1].triIntersects.size() - 1)
 					intersectLevel = _deepPosts[from.postNum - 1].triIntersects.size() - 1;
@@ -1940,7 +1941,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 		blp = &bl;
 	}
 	else  // is an end plane cut
-		assert(ep != nullptr);
+		if (!(ep != nullptr)) throw std::runtime_error("deepCut line 1944: ep != nullptr");
 	Vec3d E, nE; // , I;
 	double rayParams[2];
 	Vec2d faceParams[2];
@@ -1969,7 +1970,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 		for (auto& n : nei) {
 			nE = _deepXyz[n.vertex];
 			if ((mat = _mt->triangleMaterial(n.triangle)) < 3 || mat > 4) {
-				assert(E.X != DBL_MAX);
+				if (!(E.X != DBL_MAX)) throw std::runtime_error("deepCut line 1973: E.X != DBL_MAX");
 				if (edgeIntersect()) {
 					tr = _mt->triangleVertices(n.triangle);
 					for (int i = 0; i < 3; ++i) {
@@ -1993,7 +1994,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 		nE = _deepXyz[tr[0]];
 		for (i = 2; i > -1; --i) {
 			E = _deepXyz[tr[i]];
-			assert(E.X != DBL_MAX);
+			if (!(E.X != DBL_MAX)) throw std::runtime_error("deepCut line 1997: E.X != DBL_MAX");
 			if (edgeIntersect()) {
 				te = _mt->triAdjs(from.triangle)[i];
 				break;
@@ -2123,7 +2124,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 						}
 						++nit;
 					}
-					assert(nit != nei.end());
+					if (!(nit != nei.end())) throw std::runtime_error("deepCut line 2127: nit != nei.end()");
 					++nEdges;
 					break;
 				}
@@ -2135,7 +2136,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 				if (_mt->triangleMaterial(adjs[0] >> 2) == 3) {  // non undermined incision edge
 					auto newTin = (adjs[0] >> 2) - 1;
 					adjs = _mt->triAdjs(newTin);  // incision convention again
-					assert(_mt->triangleMaterial(adjs[0] >> 2) == 2);
+					if (!(_mt->triangleMaterial(adjs[0] >> 2) == 2)) throw std::runtime_error("deepCut line 2139: _mt->triangleMaterial(adjs[0] >> 2) == 2");
 					te = adjs[0];
 					prevMat = 2;
 					if (cutPath) {
@@ -2149,7 +2150,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 					}
 				}
 				else {
-					assert(_mt->triangleMaterial(adjs[0] >> 2) > 4);
+					if (!(_mt->triangleMaterial(adjs[0] >> 2) > 4)) throw std::runtime_error("deepCut line 2153: _mt->triangleMaterial(adjs[0] >> 2) > 4");
 					if (cutPath) {
 						ToutTri = topTe.back() >> 2;
 						ToutParam = topParams.back();
@@ -2161,7 +2162,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 				}
 			}
 			else {  // Tin
-				assert(prevMat == 5);
+				if (!(prevMat == 5)) throw std::runtime_error("deepCut line 2165: prevMat == 5");
 				if (cutPath) {
 					TinTri = (topTe.back() >> 2) - 1;
 					topTe.pop_back();
@@ -2172,7 +2173,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 				}
 				auto adjs = _mt->triAdjs((te >> 2) - 1);  // incision convention
 				te = adjs[0];
-				assert(_mt->triangleMaterial(te >> 2) == 2);
+				if (!(_mt->triangleMaterial(te >> 2) == 2)) throw std::runtime_error("deepCut line 2176: _mt->triangleMaterial(te >> 2) == 2");
 				prevMat = 2;
 			}
 			++nEdges;
@@ -2189,27 +2190,27 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 					}
 					int v50 = _deepBed[tr[splitEdge]].deepMtVertex;
 					int v51 = _deepBed[tr[(splitEdge + 1) % 3]].deepMtVertex;
-					assert(v50 > -1 && v51 > -1);
+					if (!(v50 > -1 && v51 > -1)) throw std::runtime_error("deepCut line 2193: v50 > -1 && v51 > -1");
 					std::vector<materialTriangles::neighborNode> nei;
 					_mt->getNeighbors(v51, nei);
 					auto nit = nei.begin();
 					while (nit != nei.end()) {
 						if (nit->vertex == v50) {
-							assert(_mt->triangleMaterial(nit->triangle) == 5);
+							if (!(_mt->triangleMaterial(nit->triangle) == 5)) throw std::runtime_error("deepCut line 2199: _mt->triangleMaterial(nit->triangle) == 5");
 							int* trp = _mt->triangleVertices(nit->triangle);
 							int k;
 							for (k = 0; k < 3; ++k) {
 								if (trp[k] == v50)
 									break;
 							}
-							assert(k < 3);
+							if (!(k < 3)) throw std::runtime_error("deepCut line 2206: k < 3");
 							te = (nit->triangle << 2) + k;  // deep mat 5 tris always listed in same order as the top tri that generated it.
 							prevMat = 5;
 							break;
 						}
 						++nit;
 					}
-					assert(nit != nei.end());
+					if (!(nit != nei.end())) throw std::runtime_error("deepCut line 2213: nit != nei.end()");
 					break;
 				}
 				if (edgeIntersect()) {  //  || splitTri == endTriangle condition for open ends
@@ -2272,7 +2273,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 							auto oppVert = _mt->triangleVertices(ate >> 2)[((ate & 3) + 2) % 3];
 							std::list<int> topVerts, deepVerts;
 							auto dvit = _deepBed.find(oppVert);
-							assert(dvit != _deepBed.end() && dvit->second.deepMtVertex > -1);
+							if (!(dvit != _deepBed.end() && dvit->second.deepMtVertex > -1)) throw std::runtime_error("deepCut line 2276: dvit != _deepBed.end() && dvit->second.deepMtVertex > -1");
 							topVerts.push_back(oppVert);
 							deepVerts.push_back(dvit->second.deepMtVertex);
 							float uv[2] = { 0.33f, 0.33f };
@@ -2370,7 +2371,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 							_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->tetCentroid(tet), bw);
 							mat2BorderVertex = _mt->splitTriangleEdge(splitTri, splitEdge, lastParam);
 							mat2BorderTexture = _mt->numberOfTextures() - 1;  // added in above call
-							assert(mat2BorderVertex == _vbt->_vertexTets.size());
+							if (!(mat2BorderVertex == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 2374: mat2BorderVertex == _vbt->_vertexTets.size()");
 							_vbt->_vertexTets.push_back(tet);
 							_vbt->_barycentricWeights.push_back(bw);
 							scl.deepVertsTris.push_back(mat2BorderVertex);
@@ -2417,7 +2418,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 							_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->tetCentroid(tet), bw);
 							int newV = _mt->splitTriangleEdge(lastTe >> 2, lastTe & 3, lastParam);
 							int newTx = _mt->numberOfTextures() - 1;  // added in above call
-							assert(newV == _vbt->_vertexTets.size());
+							if (!(newV == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 2421: newV == _vbt->_vertexTets.size()");
 							_vbt->_vertexTets.push_back(tet);
 							_vbt->_barycentricWeights.push_back(bw);
 							mat2BorderSplit(newV, newTx, topVertex);
@@ -2538,7 +2539,7 @@ void deepCut::mat2BorderSplit(int borderV, int borderTx, int incisionTopV) {  //
 	if (dbit == _deepBed.end())
 		throw(std::logic_error("Program error: mat2BorderSplit() called with improper setup.\n"));
 	int oppVert = _mt->addVertices(1), oppTex = _mt->addTexture(), bottomVertex = dbit->second.deepMtVertex, topTx = -1;
-	assert(oppVert == _vbt->_vertexTets.size());
+	if (!(oppVert == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 2542: oppVert == _vbt->_vertexTets.size()");
 	_vbt->_vertexTets.push_back(_vbt->getVertexTetrahedron(incisionTopV));
 	_vbt->_barycentricWeights.push_back(*_vbt->getVertexWeight(incisionTopV));
 	Vec3f V;
@@ -2608,7 +2609,7 @@ void deepCut::cutDeepSurface(int startV, Vec2d& startUV, int endV, Vec2d& endUV,
 		int tet = _vbt->parametricEdgeTet(st[edge], st[(edge + 1) % 3], *pit, gridLocus);
 //		int tet = parametricMTedgeTet(tri, edge, *pit, gridLocus);
 		int bedVertex = _mt->splitTriangleEdge(tri, edge, *pit);
-		assert(bedVertex == _vbt->_vertexTets.size());
+		if (!(bedVertex == _vbt->_vertexTets.size())) throw std::runtime_error("deepCut line 2612: bedVertex == _vbt->_vertexTets.size()");
 		_vbt->_vertexTets.push_back(tet);
 		_vbt->_barycentricWeights.push_back(Vec3f());
 		_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->_tetCentroids[tet], _vbt->_barycentricWeights.back());
@@ -2624,7 +2625,7 @@ void deepCut::cutDeepSurface(int startV, Vec2d& startUV, int endV, Vec2d& endUV,
 }
 
 void deepCut::cutSkinLine(int startV, Vec2d &startUV, int endV, Vec2d& endUV, std::vector<unsigned int>& te, std::vector<float>& params, std::vector<Vec2d>& UVs, bool Tin, bool Tout, surfaceCutLine& scl) {
-	assert(UVs.size() == te.size());
+	if (!(UVs.size() == te.size())) throw std::runtime_error("deepCut line 2628: UVs.size() == te.size()");
 	if (startV == _previousSkinTopEnd)
 		Tin = true;
 	if(endV == _loopSkinTopBegin)

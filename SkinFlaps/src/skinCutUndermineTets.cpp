@@ -119,7 +119,7 @@ bool skinCutUndermineTets::skinCut(std::vector<Vec3f> &topCutPoints, std::vector
 			deepVertexLine[i] = dbit->second.deepMtVertex;
 			continue;
 		}
-		assert((topCutPoints[i] - v3).length2() < 0.001f);
+		if (!((topCutPoints[i] - v3).length2() < 0.001f)) throw std::runtime_error("skinCutUndermineTets line 122: (topCutPoints[i] - v3).length2() < 0.001f");
 		if (uv[0] < -0.0001 || uv[1]<-0.0001 || uv[0] + uv[1]>1.001f)
 			throw(std::logic_error("Unexpected state in skinCut: invalid barycentric coordinates"));
 		else
@@ -156,7 +156,7 @@ int skinCutUndermineTets::addSurfaceVertex(const int tet, const Vec3f &gridLocus
 {  // adds both here and to materialTriangles. Return -1 means gridLocus not in tet.
 	Vec3f bw;
 	_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->tetCentroid(tet), bw);
-	assert(bw[0] >= 0.0f && bw[1] >= 0.0f && bw[2] >= 0.0f && bw[0] <= 1.0f && bw[1] <= 1.0f && bw[2] <= 1.0f && bw[0] + bw[1] + bw[2] <= 1.0f);
+	if (!(bw[0] >= 0.0f && bw[1] >= 0.0f && bw[2] >= 0.0f && bw[0] <= 1.0f && bw[1] <= 1.0f && bw[2] <= 1.0f && bw[0] + bw[1] + bw[2] <= 1.0f)) throw std::runtime_error("skinCutUndermineTets line 159: bw[0] >= 0.0f && bw[1] >= 0.0f && bw[2] >= 0.0f && bw[0] <= 1.0f && bw[1] <= 1.0f && bw[2] <= 1.0f && bw[0] + bw[1] + bw[2] <= 1.0f");
 	int newVert = _vbt->vertexNumber();
 	_vbt->_vertexTets.push_back(tet);
 	_vbt->_barycentricWeights.push_back(bw);
@@ -173,7 +173,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 {  // If uv == 0, 0 || uv == 1, 0 || uv == 0, 1 existing topVertex returned, otherwise new one created. Creates/gets a corresponding bottomVertex.
 	// If topTriangle already part of a flap a bottom vertex will be added. If no flap present an unconnected bottom edge vertex will be created.
 	// If a flap bottom does not already exists on input, bottomVertex will be negated on output.
-	assert(_mt->triangleMaterial(topTriangle) == 2);
+	if (!(_mt->triangleMaterial(topTriangle) == 2)) throw std::runtime_error("skinCutUndermineTets line 176: _mt->triangleMaterial(topTriangle) == 2");
 	// look for a flap bottom replicant of topTriangle if it exists.
 	int deepVerts[3], *tr = _mt->triangleVertices(topTriangle);
 	int bottomTriangle = 0, n = _mt->numberOfTriangles(), j = -1;
@@ -182,7 +182,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 	deepLocus.set(0.0f, 0.0f, 0.0f);
 	for (int i = 0; i < 3; ++i){
 		auto dbit = _deepBed.find(tr[i]);
-		assert(dbit != _deepBed.end());
+		if (!(dbit != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 185: dbit != _deepBed.end()");
 		if (i < 1)
 			mult = 1.0f - uv[0] - uv[1];
 		else if (i < 2)
@@ -254,7 +254,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 		;
 	if (topVertex > -1){
 		auto dbit = _deepBed.find(topVertex);
-		assert(dbit != _deepBed.end());
+		if (!(dbit != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 257: dbit != _deepBed.end()");
 		if (dbit->second.deepMtVertex > -1)
 			bottomVertex = dbit->second.deepMtVertex;
 		else
@@ -267,7 +267,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 		tr = _mt->triangleVertices(topTriangle);
 		auto dbit0 = _deepBed.find(tr[edge]);
 		auto dbit1 = _deepBed.find(tr[(edge + 1) % 3]);
-		assert(dbit0 != _deepBed.end() && dbit1 != _deepBed.end());
+		if (!(dbit0 != _deepBed.end() && dbit1 != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 270: dbit0 != _deepBed.end() && dbit1 != _deepBed.end()");
 		Vec3f gridLocus;
 		int tet = _vbt->parametricEdgeTet(tr[edge], tr[(edge + 1) % 3], param, gridLocus);
 		topVertex = _mt->splitTriangleEdge(topTriangle, edge, param);
@@ -278,12 +278,12 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 
 		dp.gridLocus = dbit0->second.gridLocus*(1.0f - param) + dbit1->second.gridLocus*param;
 		tet = flapBottomTet(topVertex, dp.gridLocus);
-		assert(tet > -1);
+		if (!(tet > -1)) throw std::runtime_error("skinCutUndermineTets line 281: tet > -1");
 		if (bottomTriangle < n){
 			tr = _mt->triangleVertices(bottomTriangle);
 			for (j = 0; j < 3; ++j){
 				if (tr[j] == dbit1->second.deepMtVertex){
-					assert(tr[(j + 1) % 3] == dbit0->second.deepMtVertex);
+					if (!(tr[(j + 1) % 3] == dbit0->second.deepMtVertex)) throw std::runtime_error("skinCutUndermineTets line 286: tr[(j + 1) % 3] == dbit0->second.deepMtVertex");
 					dp.deepMtVertex = _mt->splitTriangleEdge(bottomTriangle, j, 1.0f - param);
 					bottomVertex = dp.deepMtVertex;
 					_vbt->_vertexTets.push_back(tet);
@@ -292,7 +292,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 					break;
 				}
 			}
-			assert(j < 3);
+			if (!(j < 3)) throw std::runtime_error("skinCutUndermineTets line 295: j < 3");
 		}
 		else if (dbit0->second.deepMtVertex > -1 && dbit1->second.deepMtVertex > -1) {
 			std::vector<materialTriangles::neighborNode> nei;
@@ -303,11 +303,11 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 					break;
 				++nit;
 			}
-			assert(nit != nei.end());
+			if (!(nit != nei.end())) throw std::runtime_error("skinCutUndermineTets line 306: nit != nei.end()");
 			tr = _mt->triangleVertices(nit->triangle);
 			for (j = 0; j < 3; ++j) {
 				if (tr[j] == dbit1->second.deepMtVertex) {
-					assert(tr[(j + 1) % 3] == dbit0->second.deepMtVertex);
+					if (!(tr[(j + 1) % 3] == dbit0->second.deepMtVertex)) throw std::runtime_error("skinCutUndermineTets line 310: tr[(j + 1) % 3] == dbit0->second.deepMtVertex");
 					dp.deepMtVertex = _mt->splitTriangleEdge(nit->triangle, j, 1.0f - param);
 					bottomVertex = dp.deepMtVertex;
 					_vbt->_vertexTets.push_back(tet);
@@ -316,7 +316,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 					break;
 				}
 			}
-			assert(j < 3);
+			if (!(j < 3)) throw std::runtime_error("skinCutUndermineTets line 319: j < 3");
 		}
 		else  // no existing flap bottom
 			dp.deepMtVertex = bottomVertex = addSurfaceVertex(tet, dp.gridLocus);
@@ -327,7 +327,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 	int tet = _vbt->parametricTriangleTet(topTriangle, uv, dp.gridLocus);
 	topVertex = _mt->addNewVertexInMidTriangle(topTriangle, uv);
 	int topTexture = _mt->numberOfTextures() - 1;  // texture of this new vertex
-	assert(topVertex == _vbt->_vertexTets.size());
+	if (!(topVertex == _vbt->_vertexTets.size())) throw std::runtime_error("skinCutUndermineTets line 330: topVertex == _vbt->_vertexTets.size()");
 	_vbt->_vertexTets.push_back(tet);
 	Vec3f bw;
 	_vbt->gridLocusToBarycentricWeight(dp.gridLocus, _vbt->_tetCentroids[tet], bw);
@@ -347,8 +347,8 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 		if (trBot[j] == deepVerts[0])
 			break;
 	}
-	assert(j < 3);
-	assert(trBot[(j+1)%3] == deepVerts[2]);
+	if (!(j < 3)) throw std::runtime_error("skinCutUndermineTets line 350: j < 3");
+	if (!(trBot[(j+1)%3] == deepVerts[2])) throw std::runtime_error("skinCutUndermineTets line 351: trBot[(j+1)%3] == deepVerts[2]");
 	if (j < 1){
 		uvDeep[0] = uv[1];
 		uvDeep[1] = uv[0];
@@ -366,7 +366,7 @@ void skinCutUndermineTets::createFlapTopBottomVertices(const int topTriangle, fl
 	tet = _vbt->parametricTriangleTet(bottomTriangle, uvDeep, dp.gridLocus);
 	bottomVertex = _mt->addNewVertexInMidTriangle(bottomTriangle, uvDeep);
 	dp.deepMtVertex = bottomVertex;
-	assert(_vbt->_vertexTets.size() == bottomVertex);
+	if (!(_vbt->_vertexTets.size() == bottomVertex)) throw std::runtime_error("skinCutUndermineTets line 369: _vbt->_vertexTets.size() == bottomVertex");
 	_vbt->_vertexTets.push_back(tet);
 	_vbt->gridLocusToBarycentricWeight(dp.gridLocus, _vbt->_tetCentroids[tet], bw);
 	_vbt->_barycentricWeights.push_back(bw);
@@ -427,11 +427,11 @@ bool skinCutUndermineTets::topDeepSplit_Sub(std::list<int> &topVerts, std::list<
 	int i = 0;
 	while (dvit != deepVerts.end()) {
 		if (frontSplit && dvit == deepVerts.begin()) {
-			assert(*_mt->vertexFaceTriangle(*dvit) != 0x80000000);
+			if (!(*_mt->vertexFaceTriangle(*dvit) != 0x80000000)) throw std::runtime_error("skinCutUndermineTets line 430: *_mt->vertexFaceTriangle(*dvit) != 0x80000000");
 			std::vector<materialTriangles::neighborNode> nei;
 			_mt->getNeighbors(*dvit, nei);
 			auto nit = nei.begin();
-			assert(nit->triangle > -1);
+			if (!(nit->triangle > -1)) throw std::runtime_error("skinCutUndermineTets line 434: nit->triangle > -1");
 			while (nit != nei.end()) {
 				if (_mt->triangleMaterial(nit->triangle) == 4)
 					break;
@@ -442,7 +442,7 @@ bool skinCutUndermineTets::topDeepSplit_Sub(std::list<int> &topVerts, std::list<
 				// // COURT now done in Tin routine
 				oppBotVerts[i] = *dvit;;
 				++dvit; ++i;
-				assert(dvit != deepVerts.end());
+				if (!(dvit != deepVerts.end())) throw std::runtime_error("skinCutUndermineTets line 445: dvit != deepVerts.end()");
 			}
 			else {  // another possibility for a non-split bottom front end
 				++dvit;
@@ -481,11 +481,11 @@ bool skinCutUndermineTets::topDeepSplit_Sub(std::list<int> &topVerts, std::list<
 			else
 				++dvit;
 			if (dvit != deepVerts.end()) {  // possible deep split run
-				assert(*_mt->vertexFaceTriangle(*dvit) != 0x80000000);
+				if (!(*_mt->vertexFaceTriangle(*dvit) != 0x80000000)) throw std::runtime_error("skinCutUndermineTets line 484: *_mt->vertexFaceTriangle(*dvit) != 0x80000000");
 				std::vector<materialTriangles::neighborNode> nei;
 				_mt->getNeighbors(*dvit, nei);
 				auto nit = nei.begin();
-				assert(nit->triangle > -1);
+				if (!(nit->triangle > -1)) throw std::runtime_error("skinCutUndermineTets line 488: nit->triangle > -1");
 				while (nit != nei.end()) {
 					if (_mt->triangleMaterial(nit->triangle) == 4)
 						break;
@@ -564,9 +564,9 @@ bool skinCutUndermineTets::topDeepSplit_Sub(std::list<int> &topVerts, std::list<
 		_mt->getVertexCoordinate(t, vn.xyz);
 		pathLen += (vn - lv).length();
 		auto ltit =_deepBed.find(lt);
-		assert(ltit != _deepBed.end());
+		if (!(ltit != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 567: ltit != _deepBed.end()");
 		auto tit = _deepBed.find(t);
-		assert(tit != _deepBed.end());
+		if (!(tit != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 569: tit != _deepBed.end()");
 		Vec3f tet[3];
 		_vbt->barycentricWeightToGridLocus(_vbt->tetCentroid(_vbt->_vertexTets[lt]), _vbt->_barycentricWeights[lt], tet[0]);
 		_vbt->barycentricWeightToGridLocus(_vbt->tetCentroid(_vbt->_vertexTets[t]), _vbt->_barycentricWeights[t], tet[1]);
@@ -690,7 +690,7 @@ void skinCutUndermineTets::flapSurfaceSplitter(const int startVertex, const int 
 	if (endVertex > -1)
 		vertexCutLine.push_back(endVertex);
 	_mt->findAdjacentTriangles(true);
-	assert(*_mt->vertexFaceTriangle(*tvit) != 0x80000000);  // would signal an unconnected startVertex
+	if (!(*_mt->vertexFaceTriangle(*tvit) != 0x80000000)) throw std::runtime_error("skinCutUndermineTets line 693: *_mt->vertexFaceTriangle(*tvit) != 0x80000000");  // would signal an unconnected startVertex
 	_mt->getNeighbors(*tvit, nei);
 	auto nit = nei.begin();
 	while ( nit != nei.end() ){
@@ -698,7 +698,7 @@ void skinCutUndermineTets::flapSurfaceSplitter(const int startVertex, const int 
 			break;
 		++nit;
 	}
-	assert(nit != nei.end());
+	if (!(nit != nei.end())) throw std::runtime_error("skinCutUndermineTets line 701: nit != nei.end()");
 	int *tr = _mt->triangleVertices(nit->triangle);
 	for (int j = 0; j < 3; ++j){
 		if (tr[j] == lastV && tr[(j + 1) % 3] == *tvit){
@@ -707,7 +707,7 @@ void skinCutUndermineTets::flapSurfaceSplitter(const int startVertex, const int 
 			break;
 		}
 	}
-	assert(tri > -1);
+	if (!(tri > -1)) throw std::runtime_error("skinCutUndermineTets line 710: tri > -1");
 	do {
 		oppositeVertices[ovn] = _mt->addVertices(1);
 		Vec3f v;
@@ -722,12 +722,12 @@ void skinCutUndermineTets::flapSurfaceSplitter(const int startVertex, const int 
 		_mt->setTexture(txId, tx);
 		auto dbit = _deepBed.find(*tvit);
 		if (dbit != _deepBed.end()) {  // is a flap top vertex
-			assert(dbit->second.deepMtVertex > -1);
+			if (!(dbit->second.deepMtVertex > -1)) throw std::runtime_error("skinCutUndermineTets line 725: dbit->second.deepMtVertex > -1");
 			auto dbDeep = _deepBed.insert(std::make_pair(oppositeVertices[ovn], dbit->second));  // careful of array syntax diagnostics
 			if (!dbDeep.second)
 				dbDeep.first->second = dbit->second;
 		}
-		assert(oppositeVertices[ovn] == _vbt->_vertexTets.size());
+		if (!(oppositeVertices[ovn] == _vbt->_vertexTets.size())) throw std::runtime_error("skinCutUndermineTets line 730: oppositeVertices[ovn] == _vbt->_vertexTets.size()");
 		_vbt->_vertexTets.push_back(_vbt->_vertexTets[*tvit]);
 		_vbt->_barycentricWeights.push_back(_vbt->_barycentricWeights[*tvit]);
 		tr = _mt->triangleVertices(tri);
@@ -743,7 +743,7 @@ void skinCutUndermineTets::flapSurfaceSplitter(const int startVertex, const int 
 			vertIdx = (ae[vertIdx] + 1) % 3;
 			tr = _mt->triangleVertices(tri);
 			int* ttx = _mt->triangleTextures(tri);
-			assert(tr[vertIdx] == lastV);
+			if (!(tr[vertIdx] == lastV)) throw std::runtime_error("skinCutUndermineTets line 746: tr[vertIdx] == lastV");
 			tr[vertIdx] = oppositeVertices[ovn];
 			if (ttx[vertIdx] != lastTx) {  // crossed a texture seam
 				int twoTx[2];
@@ -822,7 +822,7 @@ bool skinCutUndermineTets::planeCutSurfaceLine(const int startTopV, const int en
 	std::vector<unsigned int> triEdges;
 	std::vector<float> edgeParams;
 	triEdges.push_back(_mt->triAdjs(i)[j]);
-	assert(triEdges.back() != 3);
+	if (!(triEdges.back() != 3)) throw std::runtime_error("skinCutUndermineTets line 825: triEdges.back() != 3");
 	edgeParams.push_back(1.0f - edgeParam);
 	int _loopGuard1 = 0;
 	do{
@@ -915,16 +915,16 @@ bool skinCutUndermineTets::trianglePath(const int triStart, const int endTriangl
 			}
 			if (count < 2) {
 				triEdges.push_back(te);
-				assert(fabs(-dNow + dNext) > 1e-16f);
+				if (!(fabs(-dNow + dNext) > 1e-16f)) throw std::runtime_error("skinCutUndermineTets line 918: fabs(-dNow + dNext) > 1e-16f");
 				params.push_back(dNext / (-dNow + dNext));
 			}
 			else {
 				try2.push_back(te);
-				assert(fabs(-dNow + dNext) > 1e-16f);
+				if (!(fabs(-dNow + dNext) > 1e-16f)) throw std::runtime_error("skinCutUndermineTets line 923: fabs(-dNow + dNext) > 1e-16f");
 				try2P.push_back(dNext / (-dNow + dNext));
 			}
 			tr = _mt->triangleVertices(te >> 2);
-			assert(std::signbit(planeDist(tr[te & 3])) != std::signbit(dNow));
+			if (!(std::signbit(planeDist(tr[te & 3])) != std::signbit(dNow))) throw std::runtime_error("skinCutUndermineTets line 927: std::signbit(planeDist(tr[te & 3])) != std::signbit(dNow)");
 			d = planeDist(tr[((te & 3) + 2) % 3]);
 			if (std::signbit(d) != std::signbit(dNow)) {
 				te = _mt->triAdjs(te >> 2)[((te & 3) + 1) % 3];
@@ -952,12 +952,12 @@ bool skinCutUndermineTets::trianglePath(const int triStart, const int endTriangl
 		else {
 			if (count < 2) {
 				triEdges.push_back(te);
-				assert(fabs(-dNow + dNext) > 1e-16f);
+				if (!(fabs(-dNow + dNext) > 1e-16f)) throw std::runtime_error("skinCutUndermineTets line 955: fabs(-dNow + dNext) > 1e-16f");
 				params.push_back(dNext / (-dNow + dNext));
 			}
 			else {
 				try2.push_back(te);
-				assert(fabs(-dNow + dNext) > 1e-16f);
+				if (!(fabs(-dNow + dNext) > 1e-16f)) throw std::runtime_error("skinCutUndermineTets line 960: fabs(-dNow + dNext) > 1e-16f");
 				try2P.push_back(dNext / (-dNow + dNext));
 			}
 		}
@@ -1096,7 +1096,7 @@ int skinCutUndermineTets::flapBottomTet(const int topVertex, const Vec3f &bottom
 		tetOut = lt.front();
 	else {
 		tetOut = _vbt->vertexSolidLinePath(topVertex, bottomGridLocus);
-		assert(tetOut > -1);
+		if (!(tetOut > -1)) throw std::runtime_error("skinCutUndermineTets line 1099: tetOut > -1");
 	}
 	return tetOut;
 }
@@ -1201,7 +1201,7 @@ bool skinCutUndermineTets::addUndermineTriangle(const int triangle, const int un
 	if (undermineMaterial == 2)
 		edgeTriangles = &_inExCisionTriangles;
 	else{
-		assert(undermineMaterial == 7);
+		if (!(undermineMaterial == 7)) throw std::runtime_error("skinCutUndermineTets line 1204: undermineMaterial == 7");
 		if (_periostealCutEdgeTriangles.empty()) {
 			for (int n = _mt->numberOfTriangles(), i = 0; i < n; ++i) {
 				int mat;
@@ -1307,7 +1307,7 @@ void skinCutUndermineTets::undermineSkin() {
 					if (dit->second.deepMtVertex > -1)
 						pr.first->second.deepV = dit->second.deepMtVertex;
 					else {
-						assert(dit != _deepBed.end());
+						if (!(dit != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 1310: dit != _deepBed.end()");
 						pr.first->second.deepV = createDeepBedVertex(dit); // puts result in dit
 					}
 				}
@@ -1320,7 +1320,7 @@ void skinCutUndermineTets::undermineSkin() {
 						if (pt2 < 0)
 							pr.first->second.deepTx.push_back(pt);
 						else
-							assert(pt2 == pt);
+							if (!(pt2 == pt)) throw std::runtime_error("skinCutUndermineTets line 1323: pt2 == pt");
 					}
 				}
 				if(pt < 0) {
@@ -1350,10 +1350,10 @@ void skinCutUndermineTets::undermineSkin() {
 		int vd[3], dTx[3], * top = _mt->triangleVertices(nt), *tx = _mt->triangleTextures(nt);
 		for (int i = 0; i < 3; ++i) {
 			auto dv = undV.find(top[i]);
-			assert(dv != undV.end());
+			if (!(dv != undV.end())) throw std::runtime_error("skinCutUndermineTets line 1353: dv != undV.end()");
 			vd[i] = dv->second.deepV;
 			int pt = findPrevTexture(tx[i], dv->second.deepTx);
-			assert(pt > -1);
+			if (!(pt > -1)) throw std::runtime_error("skinCutUndermineTets line 1356: pt > -1");
 			dTx[i] = pt;
 			auto sit = _collisionSpokes.find(top[i]);
 			if (sit != _collisionSpokes.end())
@@ -1373,11 +1373,11 @@ void skinCutUndermineTets::undermineSkin() {
 			_mt->getVertexCoordinate(oldV, vtx);
 			uv.second.deepV = _mt->addVertices(1);
 			_mt->setVertexCoordinate(uv.second.deepV, vtx);
-			assert(_vbt->_vertexTets.size() == uv.second.deepV);
+			if (!(_vbt->_vertexTets.size() == uv.second.deepV)) throw std::runtime_error("skinCutUndermineTets line 1376: _vbt->_vertexTets.size() == uv.second.deepV");
 			_vbt->_vertexTets.push_back(_vbt->getVertexTetrahedron(oldV));
 			_vbt->_barycentricWeights.push_back(*_vbt->getVertexWeight(oldV));
 			auto dbit = _deepBed.find(uv.first);
-			assert(dbit != _deepBed.end());
+			if (!(dbit != _deepBed.end())) throw std::runtime_error("skinCutUndermineTets line 1380: dbit != _deepBed.end()");
 			dbit->second.deepMtVertex = uv.second.deepV;
 			for (auto& dt : uv.second.deepTx) {
 				dt = cloneTexture(dt);
@@ -1402,7 +1402,7 @@ void skinCutUndermineTets::undermineSkin() {
 		for (int i = 0; i < 3; ++i) {
 			auto dv = undV.find(top[i])->second;  // no need to test find. already done in bed creation
 			int pt = findPrevTexture(ttx[i], dv.deepTx);
-			assert(pt > -1);
+			if (!(pt > -1)) throw std::runtime_error("skinCutUndermineTets line 1405: pt > -1");
 			if (i < 2) {
 				vb[1 - i] = dv.deepV;
 				bTx[1 - i] = pt;
@@ -1463,7 +1463,7 @@ void skinCutUndermineTets::undermineSkin() {
 		if (_mt->triAdjs(topT)[1] >> 2 == topT + 1)
 			tr[2] = v0;
 		else {
-			assert(_mt->triAdjs(topT)[2] >> 2 == topT + 1);
+			if (!(_mt->triAdjs(topT)[2] >> 2 == topT + 1)) throw std::runtime_error("skinCutUndermineTets line 1466: _mt->triAdjs(topT)[2] >> 2 == topT + 1");
 			tr[2] = v1;
 		}
 	}
@@ -1680,7 +1680,7 @@ int skinCutUndermineTets::addTinEdgeVertex(const Vec3f& closePoint, const Vec3f&
 	}
 	// flapSurfaceSplitter() doesn't dup bottom corner texture, so do it here if no incision split required.
 	auto deepEdgeTextureFix = [&](int edgeTriangle, bool isV0) {
-		assert(_mt->triangleMaterial(edgeTriangle) == 3 && _mt->triangleMaterial(_mt->triAdjs(edgeTriangle)[0] >> 2) == 2);
+		if (!(_mt->triangleMaterial(edgeTriangle) == 3 && _mt->triangleMaterial(_mt->triAdjs(edgeTriangle)[0] >> 2) == 2)) throw std::runtime_error("skinCutUndermineTets line 1683: _mt->triangleMaterial(edgeTriangle) == 3 && _mt->triangleMaterial(_mt->triAdjs(edgeTriangle)[0] >> 2) == 2");
 		// get this incision box. Use new incision convention.
 		int* deepTx = &_mt->triangleTextures(edgeTriangle + 1)[isV0 ? 1 : 0];
 		float* oldTx = _mt->getTexture(*deepTx);
@@ -1692,7 +1692,7 @@ int skinCutUndermineTets::addTinEdgeVertex(const Vec3f& closePoint, const Vec3f&
 				_mt->triangleTextures(edgeTriangle)[2] = newTx;
 		}
 		else {
-			assert((_mt->triAdjs(edgeTriangle)[2] >> 2) == edgeTriangle + 1);
+			if (!((_mt->triAdjs(edgeTriangle)[2] >> 2) == edgeTriangle + 1)) throw std::runtime_error("skinCutUndermineTets line 1695: (_mt->triAdjs(edgeTriangle)[2] >> 2) == edgeTriangle + 1");
 			if (!isV0)
 				_mt->triangleTextures(edgeTriangle)[2] = newTx;
 		}
@@ -1713,13 +1713,13 @@ int skinCutUndermineTets::addTinEdgeVertex(const Vec3f& closePoint, const Vec3f&
 
 int skinCutUndermineTets::TinSub(const int edgeTriangle, const float edgeParam)
 {  // from incision convention we know
-	assert(_mt->triangleMaterial(edgeTriangle) == 3 && _mt->triangleMaterial(_mt->triAdjs(edgeTriangle)[0]>>2) == 2);
+	if (!(_mt->triangleMaterial(edgeTriangle) == 3 && _mt->triangleMaterial(_mt->triAdjs(edgeTriangle)[0]>>2) == 2)) throw std::runtime_error("skinCutUndermineTets line 1716: _mt->triangleMaterial(edgeTriangle) == 3 && _mt->triangleMaterial(_mt->triAdjs(edgeTriangle)[0]>>2) == 2");
 	// get this incision box. Use new incision convention.
 	bool tess12;
 	if ((_mt->triAdjs(edgeTriangle)[1] >> 2) == edgeTriangle + 1)  // 1-2 quad tesselation
 		tess12 = true;
 	else {
-		assert((_mt->triAdjs(edgeTriangle)[2] >> 2) == edgeTriangle + 1);
+		if (!((_mt->triAdjs(edgeTriangle)[2] >> 2) == edgeTriangle + 1)) throw std::runtime_error("skinCutUndermineTets line 1722: (_mt->triAdjs(edgeTriangle)[2] >> 2) == edgeTriangle + 1");
 		tess12 = false;
 	}
 	int layers = 1;
@@ -1736,13 +1736,13 @@ int skinCutUndermineTets::TinSub(const int edgeTriangle, const float edgeParam)
 				break;
 			++nit;
 		}
-		assert(nit != nei.end());
+		if (!(nit != nei.end())) throw std::runtime_error("skinCutUndermineTets line 1739: nit != nei.end()");
 		int i, * tr = _mt->triangleVertices(nit->triangle);
 		for (i = 0; i < 3; ++i) {
 			if (tr[i] == deepV)
 				break;
 		}
-		assert(i < 3);
+		if (!(i < 3)) throw std::runtime_error("skinCutUndermineTets line 1745: i < 3");
 		int* ttx = _mt->triangleTextures(nit->triangle);
 		oldTx = ttx[i];
 		newTx = cloneTexture(oldTx);
@@ -1815,7 +1815,7 @@ int skinCutUndermineTets::TinSub(const int edgeTriangle, const float edgeParam)
 	verts[3][1] = verts[1][1] = _mt->splitTriangleEdge(edgeTriangle + 1, 0, 1.0f - edgeParam);
 	tex[1][1] = _mt->triangleTextures(edgeTriangle + 1)[1];
 	tex[3][1] = _mt->numberOfTextures() - 1;  // even if two layers a new texture will have been created since bottom of a material 3 incision groove will have a texture seam
-	assert(verts[1][1] == _vbt->_vertexTets.size());
+	if (!(verts[1][1] == _vbt->_vertexTets.size())) throw std::runtime_error("skinCutUndermineTets line 1818: verts[1][1] == _vbt->_vertexTets.size()");
 	_vbt->_vertexTets.push_back(tet);
 	_vbt->_barycentricWeights.push_back(baryWeight);
 	deepPoint dp;
@@ -1831,8 +1831,8 @@ int skinCutUndermineTets::TinSub(const int edgeTriangle, const float edgeParam)
 		_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->tetCentroid(tet), baryWeight);
 		verts[2][1] = _mt->splitTriangleEdge(tris[0][1], 0, 1.0f - edgeParam);
 		tex[2][1] = _mt->triangleTextures(tris[0][1])[1];
-		assert(tex[2][1] == _mt->numberOfTextures() - 2);
-		assert(verts[2][1] == _vbt->_vertexTets.size());
+		if (!(tex[2][1] == _mt->numberOfTextures() - 2)) throw std::runtime_error("skinCutUndermineTets line 1834: tex[2][1] == _mt->numberOfTextures() - 2");
+		if (!(verts[2][1] == _vbt->_vertexTets.size())) throw std::runtime_error("skinCutUndermineTets line 1835: verts[2][1] == _vbt->_vertexTets.size()");
 		_vbt->_vertexTets.push_back(tet);
 		_vbt->_barycentricWeights.push_back(baryWeight);
 		_deepBed.insert(std::make_pair(verts[2][1], dp));
@@ -1943,7 +1943,7 @@ void skinCutUndermineTets::excise(const int triangle)
 				continue;
 			unsigned int *adjs = _mt->triAdjs(i);
 			for (int j = 0; j < 3; ++j) {
-				assert(adjs[j] != 3);
+				if (!(adjs[j] != 3)) throw std::runtime_error("skinCutUndermineTets line 1946: adjs[j] != 3");
 				if (_mt->triangleMaterial(adjs[j] >> 2) == 3) {
 					_inExCisionTriangles.push_back(i);
 					break;
