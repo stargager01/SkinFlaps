@@ -327,7 +327,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		int eTri = triangle;
 		float param, uv[2];
 		tr->getBarycentricProjection(triangle, position, uv);
-		if (triMat == 2) {
+		if (triMat == _bts.getMaterialLayers().skinSurface) {
 			_sutures.nearestSkinIncisionEdge(uv, eTri, edg, param);
 			if (edg < 1) {
 				uv[0] = param;
@@ -342,7 +342,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 				uv[1] = param;
 			}
 		}
-		else if (triMat == 3) {
+		else if (triMat == _bts.getMaterialLayers().incisionEdge) {
 			int aTE = tr->triAdjs(triangle)[0];
 			if (tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().subcutaneous || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().deepBed || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().muscle)
 				aTE = tr->triAdjs(triangle - 1)[0];  // incision convention
@@ -377,9 +377,9 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 				uv[0] = 1.0f - param;
 				uv[1] = param;
 			}
-			triMat = 2;  // corrected
+			triMat = _bts.getMaterialLayers().skinSurface;  // corrected
 		}
-		else if (triMat == 6) {
+		else if (triMat == _bts.getMaterialLayers().muscle) {
 			sendUserMessage("Currently can't suture within cut muscle or fat. Please suture above or below ths point-", "USER ERROR");
 			return true;
 		}
@@ -403,7 +403,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 			int prevMat = _sutures.previousUserSuture(i);
 			if (prevMat > -1)
 				prevMat = _sutures.firstVertexMaterial(prevMat);
-			if (prevMat != 2 || triMat != 2) {
+			if (prevMat != _bts.getMaterialLayers().skinSurface || triMat != _bts.getMaterialLayers().skinSurface) {
 				sendUserMessage("Can only create an automatic suture line on a skin/mucosal edges-", "USER ERROR");
 				_sutures.deleteSuture(i);
 				return true;
@@ -424,7 +424,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 			return false;
 		materialTriangles* tr = _sg.getMaterialTriangles();
 		int mat = tr->triangleMaterial(triangle);
-		if (mat == 3 || mat == 6) {
+		if (mat == _bts.getMaterialLayers().incisionEdge || mat == _bts.getMaterialLayers().muscle) {
 			sendUserMessage("Can't excise from a skin/mucosal edge or a cut muscle belly,  Try again-", "USER ERROR");
 			return true;
 		}
@@ -570,7 +570,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		materialTriangles* tr = _sg.getMaterialTriangles();
 		int mat = tr->triangleMaterial(triangle);
 		// Anchor placement requires periosteum or bone-adjacent tissue (materials 7, 8, or 5)
-		if (mat != 5 && mat != 7 && mat != 8) {
+		if (mat != _bts.getMaterialLayers().deepBed && mat != _bts.getMaterialLayers().periosteum && mat != _bts.getMaterialLayers().periosteumUndermined) {
 			sendUserMessage("Suture anchors can only be placed on periosteum or deep bed surface (bone-adjacent tissue). Try again-", "USER ERROR");
 			return true;
 		}
@@ -782,8 +782,8 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 			invalidate();
 			return true;
 		}
-		if (triMat == 2){
-			if (_sutures.firstVertexMaterial(i) != 2){
+		if (triMat == _bts.getMaterialLayers().skinSurface){
+			if (_sutures.firstVertexMaterial(i) != _bts.getMaterialLayers().skinSurface){
 				sendUserMessage("A skin/mucosal edge can only be sutured to another skin/mucosal edge-", "USER ERROR");
 				invalidate();
 				return true;
@@ -808,9 +808,9 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 				return true;
 			}
 		}
-		else if (triMat == 3) {
+		else if (triMat == _bts.getMaterialLayers().incisionEdge) {
 			int aTE = tr->triAdjs(triangle)[0];
-			if (tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().subcutaneous || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().deepBed || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().muscle) 
+			if (tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().subcutaneous || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().deepBed || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().muscle)
 				aTE = tr->triAdjs(triangle - 1)[0];  // incision convention
 			else
 				assert(tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().skinSurface);
@@ -844,13 +844,13 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 				uv[1] = param;
 			}
 		}
-		else if (triMat == 6){
+		else if (triMat == _bts.getMaterialLayers().muscle){
 			sendUserMessage("Currently can't suture in the middle of cut muscle belly or fat. Please suture above or below this point-", "USER ERROR");
 			invalidate();
 			return true;
 		}
 		else{
-			if (_sutures.firstVertexMaterial(i) == 2){
+			if (_sutures.firstVertexMaterial(i) == _bts.getMaterialLayers().skinSurface){
 				sendUserMessage("A deep tissue can only be sutured to deep tissue and not a skin/mucosal edge-", "USER ERROR");
 				invalidate();
 				return true;
@@ -1401,7 +1401,7 @@ void surgicalActions::onKeyDown(int key)
 			while (uit != _undermineTriangles.end()) {
 				uObj.Clear();
 				setHistoryAttachPoint(uit->triangle, uv, material, hTx, hVec);
-				uObj["material"] = 2;  // at time executed all set to 10, but they came in as 2
+				uObj["material"] = _bts.getMaterialLayers().skinSurface;  // at time executed all set to undermineMarker, but they came in as skinSurface
 				uObj["incisionConnect"] = (bool)uit->incisionConnect;
 				json::Array sArr;
 				sArr.push_back(hTx[0]);
@@ -1597,7 +1597,7 @@ bool surgicalActions::setHistoryAttachPoint(const int triangle, const float(&uv)
 	// historyVec to find closest original location.  historyVec is in material coords so less sensitive to physics state.
 	materialTriangles *mtp = _sg.getMaterialTriangles();
 	material = mtp->triangleMaterial(triangle);
-	if (material == 3 || material == 6) {
+	if (material == _bts.getMaterialLayers().incisionEdge || material == _bts.getMaterialLayers().muscle) {
 		sendUserMessage("Can't attach to side of skin incision or middle of cut muscle. Try again-", "USER ERROR", false);
 		return false;
 	}
@@ -1625,12 +1625,13 @@ bool surgicalActions::setHistoryAttachPoint(const int triangle, const float(&uv)
 		tp[0] = uv[0];
 		tp[1] = uv[1];
 	}
-	auto isBorderTriangle = [mtp, material](int tri) ->bool {  // on incision edge?
+	const auto& ml = _bts.getMaterialLayers();
+	auto isBorderTriangle = [mtp, &ml](int tri) ->bool {  // on incision edge?
 		int at[3], ae[3];
 		mtp->triangleAdjacencies(tri, at, ae);
 		for (int i = 0; i < 3; ++i) {
 			int mat = mtp->triangleMaterial(at[i]);
-			if ((mat > 2 && mat < 4) || mat == 6)  // hard intermaterial cut edge to move away from
+			if (mat == ml.incisionEdge || mat == ml.muscle)  // hard intermaterial cut edge to move away from
 				return true;
 		}
 		return false;
@@ -1670,7 +1671,7 @@ bool surgicalActions::setHistoryAttachPoint(const int triangle, const float(&uv)
 	edgeN.set(0.0f, 0.0f, 0.0f);
 	for (int i = 0; i < 3; ++i) {
 		int mat = mtp->triangleMaterial(at[i]);
-		if ((mat > 2 && mat < 4) || mat == 6) {  // hard intermaterial cut edge to move away from
+		if (mat == ml.incisionEdge || mat == ml.muscle) {  // hard intermaterial cut edge to move away from
 			edgeN += triangleNormal(at[i]);
 			++eNum;
 		}
@@ -1803,7 +1804,7 @@ bool surgicalActions::setHistoryAttachPoint(const int triangle, const float(&uv)
 			int at[3], ae[3];
 			mtp->triangleAdjacencies(ntit->second.triangle, at, ae);
 			int mat = mtp->triangleMaterial(at[i]);
-			if ((mat > 2 && mat < 4) || mat == 6) {  // hard intermaterial cut edge to move away from
+			if (mat == ml.incisionEdge || mat == ml.muscle) {  // hard intermaterial cut edge to move away from
 				ntit->second.borderTriangle = true;
 				continue;
 			}
@@ -1991,9 +1992,9 @@ bool surgicalActions::getHistoryAttachPoint(const int material, const float(&his
 						int at[3], ae[3];
 						mtp->triangleAdjacencies(nextTri, at, ae);
 						int nextMaterial = mtp->triangleMaterial(at[lastEdge]);
-						if (nextMaterial == 8)
-							nextMaterial = 7;
-						if (nextMaterial != matIn && nextMaterial != 10) {  // crossed incision edge
+						if (nextMaterial == _bts.getMaterialLayers().periosteumUndermined)
+							nextMaterial = _bts.getMaterialLayers().periosteum;
+						if (nextMaterial != matIn && nextMaterial != _bts.getMaterialLayers().undermineMarker) {  // crossed incision edge
 							triangle = nextTri;
 							float edgeParam = dNow / (dNow - dNext);
 							if (lastEdge < 1) {
@@ -2466,7 +2467,7 @@ void surgicalActions::nextHistoryAction()
 		hVec[2] = pArr[2].ToFloat();
 		material = sutureObj["material0"].ToInt();
 		int eTri;
-		if (!getHistoryAttachPoint(material, hTx, hVec, eTri, uv, material == 2 ? true : false)) {
+		if (!getHistoryAttachPoint(material, hTx, hVec, eTri, uv, material == _bts.getMaterialLayers().skinSurface)) {
 			std::string msg = "Attempted attachment of suture number ";
 			msg.append(std::to_string(sutNum));
 			msg.append(" in history file failed.");
@@ -2474,7 +2475,7 @@ void surgicalActions::nextHistoryAction()
 			return;
 		}
 		assert(material == tr->triangleMaterial(eTri));
-		if (material == 2) {
+		if (material == _bts.getMaterialLayers().skinSurface) {
 			if (uv[1] == 0.0f) {
 				edge = 0;
 				param = uv[0];
@@ -2516,7 +2517,7 @@ void surgicalActions::nextHistoryAction()
 		hVec[1] = pArr[1].ToFloat();
 		hVec[2] = pArr[2].ToFloat();
 		material = sutureObj["material1"].ToInt();
-		if (!getHistoryAttachPoint(material, hTx, hVec, eTri, uv, material == 2 ? true : false)) {
+		if (!getHistoryAttachPoint(material, hTx, hVec, eTri, uv, material == _bts.getMaterialLayers().skinSurface)) {
 			std::string msg = "Attempted attachment of suture number ";
 			msg.append(std::to_string(sutNum));
 			msg.append(" in history file failed.");
@@ -2525,7 +2526,7 @@ void surgicalActions::nextHistoryAction()
 		}
 		tr->getBarycentricPosition(eTri, uv, xyz);
 		assert(material == tr->triangleMaterial(eTri));
-		if (material == 2) {
+		if (material == _bts.getMaterialLayers().skinSurface) {
 			if (uv[1] == 0.0f) {
 				edge = 0;
 				param = uv[0];

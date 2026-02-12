@@ -962,7 +962,7 @@ void deepCut::makePolygonTriangles(const std::list<int> &polyVerts, const std::l
 	for (size_t n = cdt.triangles.size(), i = 0; i < n; ++i) {
 //		std::vector<int> tri;
 		matTriangle tri;
-		tri.material = 6;
+		tri.material = _matLayers.muscle;
 		for (int j = 0; j < 3; ++j) {
 			int v;
 			if ((v = cdt.triangles[i].vertices[j]) < nOuterPolygon) {
