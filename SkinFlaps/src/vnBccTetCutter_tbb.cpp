@@ -137,10 +137,28 @@ void vnBccTetCutter_tbb::macrotetRecutCore() {
 	std::ofstream dbgLog;
 	if (!_debugLogPath.empty())
 		dbgLog.open(_debugLogPath, std::ios::app);
-	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore start" << std::endl;
+	if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore start (vnCentroids=" << _vnCentroids.size() << ")" << std::endl;
 	pack();  // removes all tets and nodes marked for deletion leaving only megatets
 	_vbt->_nMegatets = _vbt->_tetNodes.size();  // reduced after pack
 	_meganodeSize = _vbt->_nodeGridLoci.size();
+	if (_vnCentroids.empty()) {
+		// No virtual-noded centroids means no tets were marked for deletion,
+		// so there is no volume to recut. Skip interior micronode creation
+		// which can fail on numerical precision issues with z-ray intersections.
+		_vbt->_tetHash.clear();
+		_vbt->_tetHash.reserve(_vbt->_nMegatets * 1.5);
+		for (int n = _vbt->_tetCentroids.size(), i = 0; i < n; ++i)
+			_vbt->_tetHash.insert(std::make_pair(_vbt->_tetCentroids[i], i));
+		_firstNewExteriorNode = _vbt->_nodeGridLoci.size();
+		_vbt->_firstInteriorTet = _vbt->_tetNodes.size();
+		_lastTriangleSize = _mt->numberOfTriangles();
+		_lastVertexSize = _mt->numberOfVertices();
+		_vbt->_tetNodes.shrink_to_fit();
+		_vbt->_tetCentroids.shrink_to_fit();
+		_vbt->_nodeSpatialCoords = nullptr;
+		if (dbgLog.is_open()) dbgLog << "    macrotetRecutCore: no vnCentroids, skipping recut. tetNodes=" << _vbt->_tetNodes.size() << " nodeGridLoci=" << _vbt->_nodeGridLoci.size() << std::endl;
+		return;
+	}
 	_vbt->_tetHash.clear();
 	_vbt->_tetHash.reserve(_vbt->_nMegatets * 1.5);
 	for (int n = _vbt->_tetCentroids.size(), i = 0; i < n; ++i)
@@ -1186,7 +1204,8 @@ void vnBccTetCutter_tbb::createInteriorMicronodes() {
 					swapHere = false;
 				}
 				else {
-					assert(mit != mm.begin());  // possible coincident surface hit.
+					if (mit == mm.begin())  // possible coincident surface hit at start - invalid
+						throw(std::logic_error("createInteriorMicronodes: coincident surface hit at start of z-ray\n"));
 					swapHere = true;
 				}
 			}
@@ -1258,7 +1277,7 @@ void vnBccTetCutter_tbb::createInteriorMicronodes() {
 					throw(std::logic_error("Solid bounding error in createInteriorMicronodes()\n"));
 			}
 			else {
-				assert(inSolid);
+				if (!inSolid) throw(std::logic_error("createInteriorMicronodes: interior node outside solid\n"));
 				s3[2] = (short)mit->first;
 				if (mit->second.macroNode) {
 					auto iit = _boundingNodeData.find(s3);
