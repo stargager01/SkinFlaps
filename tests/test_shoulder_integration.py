@@ -266,9 +266,9 @@ class TestBedFileValidation:
                             f"'{parts[i]}' is not a valid float"
                         )
 
-    def test_bed_vertex_count_matches_obj(self):
-        """The number of lines in the .bed file must match the vertex count
-        of ShoulderSkin.obj (386 vertices)."""
+    def test_bed_vertex_count_matches_skin_verts(self):
+        """The .bed file maps skin vertices only (386 entries).
+        The merged OBJ has 628 total (386 skin + 242 deep bed)."""
         bed_count = 0
         with open(SHOULDER_BED, "r") as f:
             for line in f:
@@ -279,13 +279,10 @@ class TestBedFileValidation:
         obj_vertex_count = _count_obj_vertices(obj_path)
 
         assert bed_count == 386, (
-            f"Expected 386 bed entries, got {bed_count}"
+            f"Expected 386 bed entries (one per skin vertex), got {bed_count}"
         )
-        assert obj_vertex_count == 386, (
-            f"Expected 386 OBJ vertices, got {obj_vertex_count}"
-        )
-        assert bed_count == obj_vertex_count, (
-            f"Bed entry count ({bed_count}) != OBJ vertex count ({obj_vertex_count})"
+        assert obj_vertex_count == 628, (
+            f"Expected 628 OBJ vertices (386 skin + 242 deep bed), got {obj_vertex_count}"
         )
 
     def test_bed_all_coordinates_are_valid_floats(self):
@@ -564,7 +561,9 @@ class TestShoulderMinimalSMD:
                 f"Auto-detected .bed file '{bed_name}' not found for {obj_name}"
             )
 
-    def test_bed_vertex_count_matches_obj(self, minimal_smd):
+    def test_bed_vertex_count_valid(self, minimal_smd):
+        """The .bed file maps skin vertices only. In a multi-layer OBJ,
+        bed entries <= total OBJ vertices (bed maps skin layer only)."""
         for obj_name in minimal_smd.get("dynamicObjects", {}):
             obj_path = os.path.join(MODEL_DIR, obj_name)
             bed_path = os.path.join(MODEL_DIR, obj_name.replace(".obj", ".bed"))
@@ -574,9 +573,10 @@ class TestShoulderMinimalSMD:
                 for line in f:
                     if line.strip():
                         bed_lines += 1
-            assert bed_lines == obj_verts, (
-                f"BED entries ({bed_lines}) != OBJ vertices ({obj_verts}) for {obj_name}"
+            assert bed_lines <= obj_verts, (
+                f"BED entries ({bed_lines}) > OBJ vertices ({obj_verts}) for {obj_name}"
             )
+            assert bed_lines > 0, f"BED file is empty for {obj_name}"
 
     def test_tet_properties_valid_range(self, minimal_smd):
         props = minimal_smd.get("tetrahedralProperties", {})
@@ -585,11 +585,11 @@ class TestShoulderMinimalSMD:
         assert 1 <= ntsl <= 8, f"nTetSizeLevels={ntsl} out of [1,8]"
         assert 10 <= mdms <= 100, f"maxDimMegatetSubdivs={mdms} out of [10,100]"
 
-    def test_tet_properties_simplified(self, minimal_smd):
-        """ShoulderMinimal uses simplified physics for incremental testing."""
+    def test_tet_properties_adequate_resolution(self, minimal_smd):
+        """ShoulderMinimal needs nTetSizeLevels>=2 for sub-megatet topology."""
         props = minimal_smd.get("tetrahedralProperties", {})
-        assert props.get("nTetSizeLevels") == 1, "Expected nTetSizeLevels=1"
-        assert props.get("maxDimMegatetSubdivs") == 10, "Expected maxDimMegatetSubdivs=10"
+        assert props.get("nTetSizeLevels") >= 2, "nTetSizeLevels must be >= 2"
+        assert props.get("maxDimMegatetSubdivs") >= 16, "maxDimMegatetSubdivs must be >= 16"
 
     def test_material_layers_complete(self, minimal_smd):
         layers = minimal_smd.get("materialLayers", {})

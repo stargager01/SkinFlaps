@@ -23,8 +23,8 @@
         "hookWeight" : 800.0,
         "sutureWeight" : 3000.0,
         "autoSutureSpacing" : 0.10,
-        "nTetSizeLevels" : 1,
-        "maxDimMegatetSubdivs" : 10
+        "nTetSizeLevels" : 2,
+        "maxDimMegatetSubdivs" : 16
     },
     "tissueRegions" : {
         "skin_deltoid" : {
