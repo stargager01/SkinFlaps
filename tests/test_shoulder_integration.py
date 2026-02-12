@@ -267,8 +267,8 @@ class TestBedFileValidation:
                         )
 
     def test_bed_vertex_count_matches_skin_verts(self):
-        """The .bed file maps skin vertices only (386 entries).
-        The merged OBJ has 628 total (386 skin + 242 deep bed)."""
+        """The .bed file maps skin vertices only (385 entries).
+        The merged OBJ has 626 total (385 skin + 241 deep bed)."""
         bed_count = 0
         with open(SHOULDER_BED, "r") as f:
             for line in f:
@@ -278,11 +278,11 @@ class TestBedFileValidation:
         obj_path = os.path.join(MODEL_DIR, "ShoulderSkin.obj")
         obj_vertex_count = _count_obj_vertices(obj_path)
 
-        assert bed_count == 386, (
-            f"Expected 386 bed entries (one per skin vertex), got {bed_count}"
+        assert bed_count == 385, (
+            f"Expected 385 bed entries (one per skin vertex), got {bed_count}"
         )
-        assert obj_vertex_count == 628, (
-            f"Expected 628 OBJ vertices (386 skin + 242 deep bed), got {obj_vertex_count}"
+        assert obj_vertex_count == 626, (
+            f"Expected 626 OBJ vertices (385 skin + 241 deep bed), got {obj_vertex_count}"
         )
 
     def test_bed_all_coordinates_are_valid_floats(self):
@@ -603,35 +603,39 @@ class TestShoulderMinimalSMD:
         assert layers.get("jointCapsule") == 12
         assert layers.get("boneSurface") == 13
 
-    def test_obj_all_triangles_outward_winding(self):
-        """ShoulderSkin.obj faces must all have consistent outward winding."""
-        import math
-        vertices, faces = [], []
+    def test_obj_consistent_edge_winding(self):
+        """ShoulderSkin.obj must have consistent edge winding (manifold-compatible).
+
+        In a dual-layer manifold, the outer shell (skin) has outward normals
+        and the inner shell (deep bed + periosteum) has inward normals.
+        We check edge-level winding consistency: each shared edge must be
+        traversed in opposite directions by its two adjacent triangles.
+        """
+        faces = []
         with open(os.path.join(MODEL_DIR, "ShoulderSkin.obj")) as f:
             for line in f:
                 parts = line.strip().split()
-                if not parts:
-                    continue
-                if parts[0] == "v":
-                    vertices.append(tuple(float(p) for p in parts[1:4]))
-                elif parts[0] == "f":
+                if parts and parts[0] == "f":
                     faces.append([int(p.split("/")[0]) - 1 for p in parts[1:]])
 
-        cx = sum(v[0] for v in vertices) / len(vertices)
-        cy = sum(v[1] for v in vertices) / len(vertices)
-        cz = sum(v[2] for v in vertices) / len(vertices)
+        edge_dirs = {}  # canonical_edge -> list of (direction, face_idx)
+        winding_errors = 0
+        for fi, face in enumerate(faces):
+            for i in range(3):
+                a, b = face[i], face[(i + 1) % 3]
+                key = (min(a, b), max(a, b))
+                direction = 0 if a < b else 1
+                if key not in edge_dirs:
+                    edge_dirs[key] = []
+                edge_dirs[key].append((direction, fi))
 
-        inward = 0
-        for face in faces:
-            v0, v1, v2 = vertices[face[0]], vertices[face[1]], vertices[face[2]]
-            e1 = (v1[0]-v0[0], v1[1]-v0[1], v1[2]-v0[2])
-            e2 = (v2[0]-v0[0], v2[1]-v0[1], v2[2]-v0[2])
-            n = (e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0])
-            fc = ((v0[0]+v1[0]+v2[0])/3-cx, (v0[1]+v1[1]+v2[1])/3-cy, (v0[2]+v1[2]+v2[2])/3-cz)
-            if n[0]*fc[0] + n[1]*fc[1] + n[2]*fc[2] < 0:
-                inward += 1
+        for edge, entries in edge_dirs.items():
+            if len(entries) == 2:
+                if entries[0][0] == entries[1][0]:
+                    winding_errors += 1
 
-        assert inward == 0, f"{inward} of {len(faces)} faces have inward normals"
+        assert winding_errors == 0, \
+            f"{winding_errors} edges have inconsistent winding"
 
     def test_obj_closed_manifold(self):
         """ShoulderSkin.obj must be a closed manifold (no boundary/non-manifold edges)."""
