@@ -24,6 +24,7 @@ MODEL_DIR = os.path.join(PROJECT_ROOT, "Model")
 TESTS_DIR = os.path.join(PROJECT_ROOT, "tests")
 
 SHOULDER_SMD = os.path.join(MODEL_DIR, "ShoulderPrototype.smd")
+SHOULDER_MINIMAL_SMD = os.path.join(MODEL_DIR, "ShoulderMinimal.smd")
 FACIAL_SMD = os.path.join(MODEL_DIR, "FacialFlaps.smd")
 SHOULDER_BED = os.path.join(MODEL_DIR, "ShoulderSkin.bed")
 SHOULDER_SHADER = os.path.join(MODEL_DIR, "shoulderFragmentShader.txt")
@@ -497,3 +498,169 @@ class TestShaderValidation:
             f"  Shoulder: {norm(shoulder_uniforms)}\n"
             f"  Facial:   {norm(facial_uniforms)}"
         )
+
+
+# ===========================================================================
+# 7. ShoulderMinimal.smd Validation
+# ===========================================================================
+
+class TestShoulderMinimalSMD:
+    """Validate ShoulderMinimal.smd — the incremental shoulder config that uses
+    real shoulder skin geometry with simplified physics parameters."""
+
+    @pytest.fixture(scope="class")
+    def minimal_smd(self):
+        return _load_smd(SHOULDER_MINIMAL_SMD)
+
+    def test_file_exists(self):
+        assert os.path.isfile(SHOULDER_MINIMAL_SMD), (
+            f"ShoulderMinimal.smd not found at {SHOULDER_MINIMAL_SMD}"
+        )
+
+    def test_is_valid_json(self, minimal_smd):
+        assert isinstance(minimal_smd, dict)
+
+    def test_scene_name_triggers_shoulder_anatomy(self, minimal_smd):
+        """sceneName must contain 'Shoulder' to trigger SHOULDER anatomy type."""
+        name = minimal_smd.get("sceneName", "")
+        assert "Shoulder" in name or "shoulder" in name, (
+            f"sceneName '{name}' does not contain 'Shoulder'"
+        )
+
+    def test_dynamic_object_is_shoulder_skin(self, minimal_smd):
+        dyn = minimal_smd.get("dynamicObjects", {})
+        assert "ShoulderSkin.obj" in dyn, "dynamicObjects must include ShoulderSkin.obj"
+
+    def test_dynamic_object_file_exists(self, minimal_smd):
+        for obj_name in minimal_smd.get("dynamicObjects", {}):
+            path = os.path.join(MODEL_DIR, obj_name)
+            assert os.path.isfile(path), f"Dynamic OBJ '{obj_name}' not found"
+
+    def test_texture_maps_reference_valid_ids(self, minimal_smd):
+        valid_ids = set(minimal_smd.get("textureFiles", {}).values())
+        for obj_name, obj_data in minimal_smd.get("dynamicObjects", {}).items():
+            for tid in obj_data.get("textureMaps", []):
+                assert tid in valid_ids, (
+                    f"textureMaps id={tid} in {obj_name} not in textureFiles"
+                )
+
+    def test_texture_files_exist(self, minimal_smd):
+        for fname in minimal_smd.get("textureFiles", {}):
+            path = os.path.join(MODEL_DIR, fname)
+            assert os.path.isfile(path), f"Texture file '{fname}' not found"
+
+    def test_fragment_shader_exists(self, minimal_smd):
+        shader = minimal_smd.get("fragmentShader")
+        assert shader is not None, "fragmentShader missing"
+        path = os.path.join(MODEL_DIR, shader)
+        assert os.path.isfile(path), f"Shader '{shader}' not found"
+
+    def test_bed_file_auto_detected(self, minimal_smd):
+        """For each dynamic OBJ, a matching .bed file should exist."""
+        for obj_name in minimal_smd.get("dynamicObjects", {}):
+            bed_name = obj_name.replace(".obj", ".bed")
+            path = os.path.join(MODEL_DIR, bed_name)
+            assert os.path.isfile(path), (
+                f"Auto-detected .bed file '{bed_name}' not found for {obj_name}"
+            )
+
+    def test_bed_vertex_count_matches_obj(self, minimal_smd):
+        for obj_name in minimal_smd.get("dynamicObjects", {}):
+            obj_path = os.path.join(MODEL_DIR, obj_name)
+            bed_path = os.path.join(MODEL_DIR, obj_name.replace(".obj", ".bed"))
+            obj_verts = _count_obj_vertices(obj_path)
+            bed_lines = 0
+            with open(bed_path) as f:
+                for line in f:
+                    if line.strip():
+                        bed_lines += 1
+            assert bed_lines == obj_verts, (
+                f"BED entries ({bed_lines}) != OBJ vertices ({obj_verts}) for {obj_name}"
+            )
+
+    def test_tet_properties_valid_range(self, minimal_smd):
+        props = minimal_smd.get("tetrahedralProperties", {})
+        ntsl = props.get("nTetSizeLevels", 4)
+        mdms = props.get("maxDimMegatetSubdivs", 31)
+        assert 1 <= ntsl <= 8, f"nTetSizeLevels={ntsl} out of [1,8]"
+        assert 10 <= mdms <= 100, f"maxDimMegatetSubdivs={mdms} out of [10,100]"
+
+    def test_tet_properties_simplified(self, minimal_smd):
+        """ShoulderMinimal uses simplified physics for incremental testing."""
+        props = minimal_smd.get("tetrahedralProperties", {})
+        assert props.get("nTetSizeLevels") == 1, "Expected nTetSizeLevels=1"
+        assert props.get("maxDimMegatetSubdivs") == 10, "Expected maxDimMegatetSubdivs=10"
+
+    def test_material_layers_complete(self, minimal_smd):
+        layers = minimal_smd.get("materialLayers", {})
+        required = {"boundary", "skinSurface", "incisionEdge", "subcutaneous", "deepBed"}
+        missing = required - set(layers.keys())
+        assert not missing, f"Missing core materialLayers: {missing}"
+
+    def test_material_layers_include_shoulder(self, minimal_smd):
+        layers = minimal_smd.get("materialLayers", {})
+        assert layers.get("tendon") == 11
+        assert layers.get("jointCapsule") == 12
+        assert layers.get("boneSurface") == 13
+
+    def test_obj_all_triangles_outward_winding(self):
+        """ShoulderSkin.obj faces must all have consistent outward winding."""
+        import math
+        vertices, faces = [], []
+        with open(os.path.join(MODEL_DIR, "ShoulderSkin.obj")) as f:
+            for line in f:
+                parts = line.strip().split()
+                if not parts:
+                    continue
+                if parts[0] == "v":
+                    vertices.append(tuple(float(p) for p in parts[1:4]))
+                elif parts[0] == "f":
+                    faces.append([int(p.split("/")[0]) - 1 for p in parts[1:]])
+
+        cx = sum(v[0] for v in vertices) / len(vertices)
+        cy = sum(v[1] for v in vertices) / len(vertices)
+        cz = sum(v[2] for v in vertices) / len(vertices)
+
+        inward = 0
+        for face in faces:
+            v0, v1, v2 = vertices[face[0]], vertices[face[1]], vertices[face[2]]
+            e1 = (v1[0]-v0[0], v1[1]-v0[1], v1[2]-v0[2])
+            e2 = (v2[0]-v0[0], v2[1]-v0[1], v2[2]-v0[2])
+            n = (e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0])
+            fc = ((v0[0]+v1[0]+v2[0])/3-cx, (v0[1]+v1[1]+v2[1])/3-cy, (v0[2]+v1[2]+v2[2])/3-cz)
+            if n[0]*fc[0] + n[1]*fc[1] + n[2]*fc[2] < 0:
+                inward += 1
+
+        assert inward == 0, f"{inward} of {len(faces)} faces have inward normals"
+
+    def test_obj_closed_manifold(self):
+        """ShoulderSkin.obj must be a closed manifold (no boundary/non-manifold edges)."""
+        faces = []
+        with open(os.path.join(MODEL_DIR, "ShoulderSkin.obj")) as f:
+            for line in f:
+                parts = line.strip().split()
+                if parts and parts[0] == "f":
+                    faces.append([int(p.split("/")[0]) - 1 for p in parts[1:]])
+
+        edges = {}
+        for face in faces:
+            for i in range(3):
+                e = tuple(sorted([face[i], face[(i+1) % 3]]))
+                edges[e] = edges.get(e, 0) + 1
+
+        boundary = sum(1 for c in edges.values() if c == 1)
+        non_manifold = sum(1 for c in edges.values() if c > 2)
+        assert boundary == 0, f"{boundary} boundary edges found"
+        assert non_manifold == 0, f"{non_manifold} non-manifold edges found"
+
+    def test_compatible_with_shoulder_prototype(self, minimal_smd):
+        """ShoulderMinimal must use the same materialLayers IDs as ShoulderPrototype."""
+        proto = _load_smd(SHOULDER_SMD)
+        proto_layers = proto.get("materialLayers", {})
+        minimal_layers = minimal_smd.get("materialLayers", {})
+        for key in minimal_layers:
+            if key in proto_layers:
+                assert minimal_layers[key] == proto_layers[key], (
+                    f"materialLayers['{key}'] differs: minimal={minimal_layers[key]} "
+                    f"vs prototype={proto_layers[key]}"
+                )
