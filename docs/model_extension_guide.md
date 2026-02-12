@@ -669,7 +669,7 @@ anatomy-specific material types beyond the core facial set.
 
 ---
 
-*Document version: 2026-02-12 v3. Covers materialLayerConfig refactoring (Phase 1),
+*Document version: 2026-02-12 v3.1.0. Covers materialLayerConfig refactoring (Phase 1),
 configurable .smd loading (Phase 2), material region assignment (Phase 3), and
 single-shell architecture rule. Updated to reflect that material 5 (deep bed)
 is runtime-assigned via .bed file, never stored in OBJ files.*

@@ -6,6 +6,11 @@
 #ifndef _SURGICAL_SIM_GUI_
 #define _SURGICAL_SIM_GUI_
 
+#define SKINFLAPS_VERSION_MAJOR 3
+#define SKINFLAPS_VERSION_MINOR 1
+#define SKINFLAPS_VERSION_PATCH 0
+#define SKINFLAPS_VERSION_STRING "3.1.0"
+
 #ifdef WIN32
 #include <direct.h>
 #define GetCurrentDir _getcwd

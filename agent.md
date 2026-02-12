@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-**Project Name:** SkinFlaps (v1.2.1)
+**Project Name:** SkinFlaps (v3.1.0)
 
 **Purpose:** Soft tissue surgical simulation for skin flap design and surgical planning. Allows surgeons to experiment with their own surgical designs to solve soft tissue surgery problems, including facial skin flap procedures and cleft lip repair.
 
