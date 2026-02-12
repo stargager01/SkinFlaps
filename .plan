@@ -1,49 +1,156 @@
-# Next Steps Plan: Shoulder Model Loading Pipeline
+# Shoulder Surgery materialLayers Implementation Plan
 
 ## Current Status
-- **16 commits** of iterative debugging on the loading pipeline
-- Fixed: JSON empty objects, abort() handling, assert→exception conversion,
-  face winding, manifold check, vector out-of-bounds in linkMicrotetsToMegatets
-- MinimalTest.smd uses simplified params: nTetSizeLevels=1, maxDimMegatetSubdivs=10
-- **ShoulderMinimal.smd created** — real shoulder skin geometry with simplified physics
-- Extensive debug logging throughout vnBccTetCutter_tbb.cpp and bccTetScene.cpp
-- 70 Python tests pass; no uncommitted changes
+- ShoulderMinimal.smd loads successfully (300 tets, 104 nodes)
+- 99 assert() converted to catchable exceptions in deepCut + skinCutUndermineTets
+- deepCut crashes on shoulder model: hardcoded material IDs (2→3→4→5) assume facial topology
+- materialLayerConfig struct exists in bccTetScene.h but is NEVER passed to cut classes
+- 87 Python tests pass
 
-## ShoulderMinimal.smd Design
-- Dynamic object: ShoulderSkin.obj (386 vertices, 768 faces, material 2)
-- Deep bed: ShoulderSkin.bed (386 vertices, auto-detected)
-- Physics: nTetSizeLevels=1, maxDimMegatetSubdivs=10 (minimal for testing)
-- Shader: shoulderFragmentShader.txt (13 material layers verified)
-- No static objects or tet subsets (incremental approach)
+## Architecture Analysis
 
-## Plan
+Class chain: bccTetScene → surgicalActions → deepCut (inherits skinCutUndermineTets)
 
-### Phase 1: Verify MinimalTest loads end-to-end ← PENDING USER TEST
-- User rebuilds and tests with the linkMicrotetsToMegatets fix (commit 082f6cc)
-- Confirm loadScene_debug.log shows full completion through "Lattice: complete"
-- Fix any further crashes revealed by the new logging
+materialLayerConfig lives in bccTetScene._materialLayers with getter getMaterialLayers().
+deepCut/skinCutUndermineTets have NO access to it — all 76+ material checks use bare ints.
 
-### Phase 2: Load ShoulderMinimal.smd (simplified shoulder)
-- Test with ShoulderSkin.obj + simplified physics (nTetSizeLevels=1)
-- This validates the pipeline with real anatomical geometry
-- Fix any geometry-specific or scale-dependent issues
+Hardcoded sites:
+  deepCut.cpp:              25 reads + 4 writes = 29 sites
+  skinCutUndermineTets.cpp: 39 reads + 8 writes = 47 sites
+  Total:                    76 sites
 
-### Phase 3: Add static objects and tet subsets
-- Add bone OBJs (humerus, glenoid, acromion) as staticObjects
-- Add muscle/tendon OBJs as tetrahedralSubsets
-- Add tissue regions with per-region physics overrides
+## Implementation Plan
 
-### Phase 4: Increase physics resolution
-- Bump to nTetSizeLevels=3, maxDimMegatetSubdivs=20
-- Then to production: nTetSizeLevels=4, maxDimMegatetSubdivs=40
+### Phase 1A: Plumb materialLayerConfig to incision classes
+**Goal**: Pass config from bccTetScene to deepCut without changing logic yet
 
-### Phase 5: Clean up debug logging
-- Gate debug log writes behind a #define or runtime flag
-- Keep bounds-checking throws and assert→exception conversions
+1. skinCutUndermineTets.h:
+   - #include "bccTetScene.h" (for materialLayerConfig)
+   - Add protected member: materialLayerConfig _matLayers;
+   - Add public setter: void setMaterialLayers(const materialLayerConfig& ml) { _matLayers = ml; }
+   - deepCut inherits this automatically
 
-### Phase 6: Load full ShoulderPrototype.smd
-- Test with all 7 OBJs, 2752 total faces, production physics settings
-- Verify surgical workflow: incision → suture → hook → collision
+2. bccTetScene.cpp loadScene() (~line 470, after setMaterialTriangles):
+   - Add: _surgAct->getDeepCutPtr()->setMaterialLayers(_materialLayers);
 
-### Phase 7: Verify original facial models (FacialFlaps.smd)
-- Ensure our changes didn't break the primary use case
+Files: skinCutUndermineTets.h, bccTetScene.cpp
+Risk: LOW — additive only, no logic change
+Verification: compile + 87 tests pass
+
+### Phase 1B: Add material helper predicates
+**Goal**: Centralize material classification into reusable inline methods
+
+Add to skinCutUndermineTets.h (protected section):
+
+  bool isSkinSurface(int mat) const     { return mat == _matLayers.skinSurface; }
+  bool isIncisionEdge(int mat) const    { return mat == _matLayers.incisionEdge; }
+  bool isSubcutaneous(int mat) const    { return mat == _matLayers.subcutaneous; }
+  bool isDeepBed(int mat) const         { return mat == _matLayers.deepBed; }
+  bool isMuscle(int mat) const          { return mat == _matLayers.muscle; }
+  bool isBoundary(int mat) const        { return mat == _matLayers.boundary; }
+  bool isUndermineMarker(int mat) const { return mat == _matLayers.undermineMarker; }
+  bool isPeriosteal(int mat) const {
+      return mat == _matLayers.periosteum || mat == _matLayers.periosteumUndermined;
+  }
+  bool isDeepTissue(int mat) const {
+      return isDeepBed(mat) || isMuscle(mat) || isPeriosteal(mat);
+  }
+
+Files: skinCutUndermineTets.h
+Risk: LOW — additive only
+Verification: compile + tests pass
+
+### Phase 1C: Replace hardcoded materials in skinCutUndermineTets.cpp
+**Goal**: 47 sites → configurable
+
+Material reads (39 sites):
+  == 2  → isSkinSurface(mat)           14 sites
+  == 3  → isIncisionEdge(mat)          10 sites
+  == 4  → isSubcutaneous(mat)           3 sites
+  == 5  → isDeepBed(mat)                2 sites
+  == 10 → isUndermineMarker(mat)        2 sites
+  == 7 || == 8 → isPeriosteal(mat)      4 sites
+  > 4   → isDeepTissue(mat)             2 sites
+  > 6   → isPeriosteal(mat) || isUndermineMarker(mat)  2 sites
+
+Material writes (8 sites):
+  setTriangleMaterial(x, 3)  → _matLayers.incisionEdge    6 sites
+  setTriangleMaterial(x, 4)  → _matLayers.subcutaneous    1 site
+  setTriangleMaterial(x, 10) → _matLayers.undermineMarker 1 site
+
+Files: skinCutUndermineTets.cpp
+Risk: MEDIUM — mechanical but numerous
+Verification: compile + tests + facial model must work identically (defaults match)
+
+### Phase 1D: Replace hardcoded materials in deepCut.cpp
+**Goal**: 29 sites → configurable
+
+Material reads (25 sites):
+  == 2  → isSkinSurface(mat)            8 sites
+  == 1  → isBoundary(mat)               1 site
+  == 3  → isIncisionEdge(mat)           3 sites
+  == 4  → isSubcutaneous(mat)           3 sites
+  == 5  → isDeepBed(mat)                3 sites
+  > 4   → isDeepTissue(mat)             2 sites
+  == 7||8||10 → isPeriosteal||isUndermineMarker  3 sites
+  > 6   → isPeriosteal(mat)||isUndermineMarker(mat)  2 sites
+
+Material writes (4 sites):
+  tri.material = 6  → _matLayers.muscle              1 site
+  tri.material = 2  → _matLayers.skinSurface          1 site
+  tri.material = 5  → _matLayers.deepBed              1 site
+  prevMat==2?2:5    → isSkinSurface?skinSurface:deepBed 1 site
+
+Files: deepCut.cpp
+Risk: MEDIUM-HIGH — some complex conditional logic interleaved with material checks
+
+### Phase 1E: Regression testing
+**Goal**: Verify facial model unchanged, shoulder model improved
+
+1. Run existing 87 tests (must all pass)
+2. Verify materialLayerConfig defaults == original hardcoded values:
+   boundary=1, skinSurface=2, incisionEdge=3, subcutaneous=4, deepBed=5,
+   muscle=6, periosteum=7, periosteumUndermined=8, undermineMarker=10
+3. Add new tests:
+   - test materialLayerConfig plumbing (config reaches deepCut)
+   - test predicate helpers with both facial and shoulder configs
+   - test that shoulder materialLayers values match ShoulderPrototype.smd
+4. Load FacialFlaps.smd → verify incision workflow (visual)
+5. Load ShoulderMinimal.smd → verify incision gives error message, not crash
+
+### Phase 2 (Future): Library extraction
+**Prerequisite**: Phase 1 stable for 2+ weeks with both facial and shoulder models
+
+When ready:
+- Extract materialLayerConfig + predicates into standalone header
+- Create PhysicsBasedModeling-Core repo (or module within SkinFlaps)
+- Add anatomyType-aware factory: createDefaultLayers(AnatomyType)
+- Add JSON serialization/deserialization standalone
+- SkinFlaps includes as header-only dependency
+
+This is deferred because:
+- 13-field struct doesn't justify separate repo yet
+- Need real usage data from shoulder model testing first
+- Interface may change based on Phase 1 findings
+
+### Phase 3 (Future): Multi-anatomy expansion
+**Prerequisite**: Phase 2 complete + shoulder surgery fully functional
+
+- Add knee, hip, spine anatomy configs
+- Generalize tissue region mapping
+- Support arbitrary material layer counts
+
+## Execution Order & Estimates
+
+| Step | Files Modified | Sites Changed | Risk |
+|------|---------------|---------------|------|
+| 1A: Plumb config | 2 | 3 lines added | LOW |
+| 1B: Add predicates | 1 | 15 lines added | LOW |
+| 1C: skinCutUndermineTets | 1 | 47 replacements | MEDIUM |
+| 1D: deepCut | 1 | 29 replacements | MEDIUM-HIGH |
+| 1E: Tests | 2 | New test cases | LOW |
+
+## Key Constraint
+materialLayerConfig DEFAULT values must be identical to the original hardcoded integers.
+This guarantees facial model behavior is UNCHANGED after refactoring.
+The shoulder model benefits because its .smd overrides these defaults.
