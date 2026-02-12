@@ -1,0 +1,49 @@
+# Next Steps Plan: Shoulder Model Loading Pipeline
+
+## Current Status
+- **16 commits** of iterative debugging on the loading pipeline
+- Fixed: JSON empty objects, abort() handling, assert→exception conversion,
+  face winding, manifold check, vector out-of-bounds in linkMicrotetsToMegatets
+- MinimalTest.smd uses simplified params: nTetSizeLevels=1, maxDimMegatetSubdivs=10
+- **ShoulderMinimal.smd created** — real shoulder skin geometry with simplified physics
+- Extensive debug logging throughout vnBccTetCutter_tbb.cpp and bccTetScene.cpp
+- 70 Python tests pass; no uncommitted changes
+
+## ShoulderMinimal.smd Design
+- Dynamic object: ShoulderSkin.obj (386 vertices, 768 faces, material 2)
+- Deep bed: ShoulderSkin.bed (386 vertices, auto-detected)
+- Physics: nTetSizeLevels=1, maxDimMegatetSubdivs=10 (minimal for testing)
+- Shader: shoulderFragmentShader.txt (13 material layers verified)
+- No static objects or tet subsets (incremental approach)
+
+## Plan
+
+### Phase 1: Verify MinimalTest loads end-to-end ← PENDING USER TEST
+- User rebuilds and tests with the linkMicrotetsToMegatets fix (commit 082f6cc)
+- Confirm loadScene_debug.log shows full completion through "Lattice: complete"
+- Fix any further crashes revealed by the new logging
+
+### Phase 2: Load ShoulderMinimal.smd (simplified shoulder)
+- Test with ShoulderSkin.obj + simplified physics (nTetSizeLevels=1)
+- This validates the pipeline with real anatomical geometry
+- Fix any geometry-specific or scale-dependent issues
+
+### Phase 3: Add static objects and tet subsets
+- Add bone OBJs (humerus, glenoid, acromion) as staticObjects
+- Add muscle/tendon OBJs as tetrahedralSubsets
+- Add tissue regions with per-region physics overrides
+
+### Phase 4: Increase physics resolution
+- Bump to nTetSizeLevels=3, maxDimMegatetSubdivs=20
+- Then to production: nTetSizeLevels=4, maxDimMegatetSubdivs=40
+
+### Phase 5: Clean up debug logging
+- Gate debug log writes behind a #define or runtime flag
+- Keep bounds-checking throws and assert→exception conversions
+
+### Phase 6: Load full ShoulderPrototype.smd
+- Test with all 7 OBJs, 2752 total faces, production physics settings
+- Verify surgical workflow: incision → suture → hook → collision
+
+### Phase 7: Verify original facial models (FacialFlaps.smd)
+- Ensure our changes didn't break the primary use case
