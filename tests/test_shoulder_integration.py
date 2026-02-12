@@ -267,8 +267,8 @@ class TestBedFileValidation:
                         )
 
     def test_bed_vertex_count_matches_skin_verts(self):
-        """The .bed file maps skin vertices only (385 entries).
-        The merged OBJ has 626 total (385 skin + 241 deep bed)."""
+        """The .bed file maps all OBJ vertices (386 entries).
+        The single-shell OBJ has 386 vertices (no deep bed faces)."""
         bed_count = 0
         with open(SHOULDER_BED, "r") as f:
             for line in f:
@@ -278,11 +278,11 @@ class TestBedFileValidation:
         obj_path = os.path.join(MODEL_DIR, "ShoulderSkin.obj")
         obj_vertex_count = _count_obj_vertices(obj_path)
 
-        assert bed_count == 385, (
-            f"Expected 385 bed entries (one per skin vertex), got {bed_count}"
+        assert bed_count == 386, (
+            f"Expected 386 bed entries (one per OBJ vertex), got {bed_count}"
         )
-        assert obj_vertex_count == 626, (
-            f"Expected 626 OBJ vertices (385 skin + 241 deep bed), got {obj_vertex_count}"
+        assert obj_vertex_count == 386, (
+            f"Expected 386 OBJ vertices (single-shell), got {obj_vertex_count}"
         )
 
     def test_bed_all_coordinates_are_valid_floats(self):
@@ -562,8 +562,7 @@ class TestShoulderMinimalSMD:
             )
 
     def test_bed_vertex_count_valid(self, minimal_smd):
-        """The .bed file maps skin vertices only. In a multi-layer OBJ,
-        bed entries <= total OBJ vertices (bed maps skin layer only)."""
+        """The .bed file should have one entry per OBJ vertex (single-shell)."""
         for obj_name in minimal_smd.get("dynamicObjects", {}):
             obj_path = os.path.join(MODEL_DIR, obj_name)
             bed_path = os.path.join(MODEL_DIR, obj_name.replace(".obj", ".bed"))
@@ -606,10 +605,8 @@ class TestShoulderMinimalSMD:
     def test_obj_consistent_edge_winding(self):
         """ShoulderSkin.obj must have consistent edge winding (manifold-compatible).
 
-        In a dual-layer manifold, the outer shell (skin) has outward normals
-        and the inner shell (deep bed + periosteum) has inward normals.
-        We check edge-level winding consistency: each shared edge must be
-        traversed in opposite directions by its two adjacent triangles.
+        Each shared edge must be traversed in opposite directions by its two
+        adjacent triangles (consistent orientation across the surface).
         """
         faces = []
         with open(os.path.join(MODEL_DIR, "ShoulderSkin.obj")) as f:

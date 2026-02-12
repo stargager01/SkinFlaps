@@ -330,8 +330,12 @@ class TestDefaultsFallbackBehavior:
 MODEL_DIR = os.path.join(PROJECT_ROOT, "Model")
 
 
-class TestShoulderMinimalMultiLayer:
-    """Verify ShoulderSkin.obj has proper multi-layer structure for surgical operations."""
+class TestShoulderMinimalMaterialRegions:
+    """Verify ShoulderSkin.obj has proper material region assignments.
+
+    Matches facial model architecture: single closed surface with materials 1, 2, 7.
+    Deep bed defined via .bed file, NOT as OBJ faces (material 5 is runtime-assigned).
+    """
 
     @pytest.fixture(autouse=True)
     def load_obj(self):
@@ -361,37 +365,33 @@ class TestShoulderMinimalMultiLayer:
                         face.append(int(indices[0]))
                     self.faces_by_mat[current_mat].append(face)
 
-    def test_has_all_four_materials(self):
-        """Merged OBJ must contain materials 1, 2, 5, 7."""
+    def test_has_three_materials(self):
+        """OBJ must contain materials 1, 2, 7 (no material 5 - deep bed is via .bed)."""
         assert 1 in self.faces_by_mat, "Missing material 1 (boundary)"
         assert 2 in self.faces_by_mat, "Missing material 2 (skinSurface)"
-        assert 5 in self.faces_by_mat, "Missing material 5 (deepBed)"
         assert 7 in self.faces_by_mat, "Missing material 7 (periosteum)"
+        assert 5 not in self.faces_by_mat, "Material 5 should NOT be in OBJ (deep bed via .bed)"
 
     def test_boundary_face_count(self):
-        """Material 1 (boundary) should have 44 faces (rim stitching strip)."""
-        assert len(self.faces_by_mat[1]) == 44
+        """Material 1 (boundary) should have 24 faces (bottom fan at y=0)."""
+        assert len(self.faces_by_mat[1]) == 24
 
     def test_skin_surface_face_count(self):
-        """Material 2 (skin) should have 744 faces."""
-        assert len(self.faces_by_mat[2]) == 744
-
-    def test_deep_bed_face_count(self):
-        """Material 5 (deep bed) should have 440 faces."""
-        assert len(self.faces_by_mat[5]) == 440
+        """Material 2 (skin) should have 720 faces (main body)."""
+        assert len(self.faces_by_mat[2]) == 720
 
     def test_periosteum_face_count(self):
-        """Material 7 (periosteum) should have 20 faces."""
-        assert len(self.faces_by_mat[7]) == 20
+        """Material 7 (periosteum) should have 24 faces (top fan at apex)."""
+        assert len(self.faces_by_mat[7]) == 24
 
     def test_total_vertex_count(self):
-        """Merged OBJ = 385 skin + 241 deep bed = 626 vertices."""
-        assert len(self.verts) == 626
+        """Single-shell OBJ: 386 vertices (UV sphere dome)."""
+        assert len(self.verts) == 386
 
     def test_total_face_count(self):
-        """Total faces = 768 skin + 480 deep bed = 1248."""
+        """Total faces = 24 boundary + 720 skin + 24 periosteum = 768."""
         total = sum(len(fl) for fl in self.faces_by_mat.values())
-        assert total == 1248
+        assert total == 768
 
     def test_boundary_verts_at_y0(self):
         """Boundary faces should use vertices at y=0 (bottom edge anchors)."""
@@ -413,19 +413,13 @@ class TestShoulderMinimalMultiLayer:
             assert self.verts[vi - 1][1] > 5.5, \
                 f"Periosteum vertex {vi} has y={self.verts[vi-1][1]:.4f}, expected >5.5"
 
-    def test_skin_verts_in_original_range(self):
-        """Skin surface faces should reference vertices 1-385 (skin range)."""
-        for face in self.faces_by_mat[2]:
-            for vi in face:
-                assert 1 <= vi <= 385, \
-                    f"Skin face has vertex {vi} outside range [1,385]"
-
-    def test_deep_bed_verts_in_offset_range(self):
-        """Deep bed faces should reference vertices 386-626 (offset range)."""
-        for face in self.faces_by_mat[5]:
-            for vi in face:
-                assert 386 <= vi <= 626, \
-                    f"Deep bed face has vertex {vi} outside range [386,626]"
+    def test_all_verts_in_range(self):
+        """All face vertex indices must be 1..386 (single shell)."""
+        for mat, flist in self.faces_by_mat.items():
+            for face in flist:
+                for vi in face:
+                    assert 1 <= vi <= 386, \
+                        f"Material {mat}: vertex {vi} out of range [1,386]"
 
     def test_no_degenerate_faces(self):
         """No face should have duplicate vertex indices."""
@@ -434,17 +428,9 @@ class TestShoulderMinimalMultiLayer:
                 assert len(set(face)) == 3, \
                     f"Material {mat} face {fi} is degenerate: {face}"
 
-    def test_all_vertex_indices_in_range(self):
-        """All face vertex indices must be 1..626."""
-        for mat, flist in self.faces_by_mat.items():
-            for face in flist:
-                for vi in face:
-                    assert 1 <= vi <= 626, \
-                        f"Material {mat}: vertex {vi} out of range"
 
-
-class TestBedCoordinatesAfterMerge:
-    """Verify .bed coordinates remain valid after multi-layer OBJ merge."""
+class TestBedCoordinates:
+    """Verify .bed coordinates are valid for the ShoulderSkin model."""
 
     @pytest.fixture(autouse=True)
     def load_data(self):
@@ -471,14 +457,14 @@ class TestBedCoordinatesAfterMerge:
                     })
 
     def test_bed_entry_count(self):
-        """Should have 385 .bed entries (one per skin vertex)."""
-        assert len(self.bed_entries) == 385
+        """Should have 386 .bed entries (one per OBJ vertex)."""
+        assert len(self.bed_entries) == 386
 
     def test_bed_vertex_indices_valid(self):
-        """All .bed vertex indices should be 0-384 (skin vertices only)."""
+        """All .bed vertex indices should be 0-385 (all OBJ vertices)."""
         for entry in self.bed_entries:
-            assert 0 <= entry['vid'] <= 384, \
-                f".bed vertex {entry['vid']} outside skin range [0,384]"
+            assert 0 <= entry['vid'] <= 385, \
+                f".bed vertex {entry['vid']} outside range [0,385]"
 
     def test_bed_coords_inside_obj_bbox(self):
         """All .bed positions must be inside the merged OBJ bounding box."""
@@ -497,9 +483,17 @@ class TestBedCoordinatesAfterMerge:
             assert min_z - tol <= e['z'] <= max_z + tol, \
                 f"Vertex {e['vid']} z={e['z']} outside [{min_z},{max_z}]"
 
-    def test_bed_coords_inside_deep_bed_bbox(self):
-        """All .bed positions should be inside the deep bed sub-mesh bounding box."""
-        deep_verts = self.verts[385:]  # deep bed vertices start at index 385
+    def test_bed_coords_inside_deep_bed_file(self):
+        """All .bed positions should be within the deep bed OBJ bounding box."""
+        deep_path = os.path.join(MODEL_DIR, "ShoulderDeepBed.obj")
+        if not os.path.exists(deep_path):
+            pytest.skip("ShoulderDeepBed.obj not present")
+        deep_verts = []
+        with open(deep_path) as f:
+            for line in f:
+                if line.startswith('v ') and not line.startswith('vt'):
+                    parts = line.split()
+                    deep_verts.append((float(parts[1]), float(parts[2]), float(parts[3])))
         min_x = min(v[0] for v in deep_verts)
         max_x = max(v[0] for v in deep_verts)
         min_y = min(v[1] for v in deep_verts)
