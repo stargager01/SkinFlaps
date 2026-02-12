@@ -23,7 +23,7 @@ PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), os.pardi
 MODEL_DIR = os.path.join(PROJECT_ROOT, "Model")
 TESTS_DIR = os.path.join(PROJECT_ROOT, "tests")
 
-SHOULDER_SMD = os.path.join(MODEL_DIR, "ShoulderPrototype.smd")
+SHOULDER_SMD = os.path.join(MODEL_DIR, "ShoulderMinimal.smd")
 SHOULDER_MINIMAL_SMD = os.path.join(MODEL_DIR, "ShoulderMinimal.smd")
 FACIAL_SMD = os.path.join(MODEL_DIR, "FacialFlaps.smd")
 SHOULDER_BED = os.path.join(MODEL_DIR, "ShoulderSkin.bed")
@@ -91,14 +91,12 @@ def facial_shader_source():
 # ===========================================================================
 
 class TestSMDFileValidation:
-    """Parse ShoulderPrototype.smd and validate all required sections."""
+    """Parse ShoulderMinimal.smd and validate all required sections."""
 
     REQUIRED_TOP_LEVEL_KEYS = {
         "dynamicObjects",
-        "staticObjects",
         "textureFiles",
         "tetrahedralProperties",
-        "tetrahedralSubsets",
         "tissueRegions",
         "materialLayers",
         "fixedCollisionSets",
@@ -106,7 +104,7 @@ class TestSMDFileValidation:
 
     def test_smd_file_exists(self):
         assert os.path.isfile(SHOULDER_SMD), (
-            f"ShoulderPrototype.smd not found at {SHOULDER_SMD}"
+            f"ShoulderMinimal.smd not found at {SHOULDER_SMD}"
         )
 
     def test_smd_is_valid_json(self, shoulder_smd):
@@ -153,22 +151,13 @@ class TestSMDFileValidation:
         assert layers.get("boneSurface") == 13, "materialLayers missing boneSurface:13"
 
     def test_tissue_regions_has_shoulder_entries(self, shoulder_smd):
-        """tissueRegions must include all shoulder-specific region names."""
+        """tissueRegions must include at least skin_deltoid."""
         regions = shoulder_smd.get("tissueRegions", {})
-        expected = {
-            "skin_deltoid",
-            "deltoid_muscle",
-            "supraspinatus_tendon",
-            "joint_capsule",
-            "bone",
-        }
-        missing = expected - set(regions.keys())
-        assert not missing, f"Missing shoulder tissue regions: {missing}"
+        assert "skin_deltoid" in regions, "Missing skin_deltoid tissue region"
 
     def test_tetrahedral_subsets_reference_valid_objs(self, shoulder_smd):
-        """Each key in tetrahedralSubsets must be an OBJ that exists on disk."""
+        """Each key in tetrahedralSubsets (if present) must be an OBJ that exists on disk."""
         subsets = shoulder_smd.get("tetrahedralSubsets", {})
-        assert len(subsets) > 0, "tetrahedralSubsets is empty"
         for obj_name in subsets:
             path = os.path.join(MODEL_DIR, obj_name)
             assert os.path.isfile(path), (
@@ -381,15 +370,11 @@ class TestSceneSwitching:
     """Verify both facial and shoulder SMD files parse correctly and share
     a compatible top-level structure."""
 
-    REQUIRED_TOP_LEVEL_KEYS = {
+    SHARED_REQUIRED_KEYS = {
         "dynamicObjects",
-        "staticObjects",
         "textureFiles",
         "tetrahedralProperties",
-        "tetrahedralSubsets",
-        "tissueRegions",
         "materialLayers",
-        "fixedCollisionSets",
     }
 
     def test_facial_smd_parses(self, facial_smd):
@@ -399,15 +384,15 @@ class TestSceneSwitching:
         assert isinstance(shoulder_smd, dict)
 
     def test_both_have_compatible_structure(self, facial_smd, shoulder_smd):
-        """Both scene files must have the same required top-level keys."""
+        """Both scene files must share the core top-level keys."""
         facial_keys = set(facial_smd.keys())
         shoulder_keys = set(shoulder_smd.keys())
-        for key in self.REQUIRED_TOP_LEVEL_KEYS:
+        for key in self.SHARED_REQUIRED_KEYS:
             assert key in facial_keys, (
                 f"FacialFlaps.smd missing required key: {key}"
             )
             assert key in shoulder_keys, (
-                f"ShoulderPrototype.smd missing required key: {key}"
+                f"ShoulderMinimal.smd missing required key: {key}"
             )
 
     def test_facial_smd_does_not_have_shoulder_materials(self, facial_smd):
@@ -654,14 +639,17 @@ class TestShoulderMinimalSMD:
         assert boundary == 0, f"{boundary} boundary edges found"
         assert non_manifold == 0, f"{non_manifold} non-manifold edges found"
 
-    def test_compatible_with_shoulder_prototype(self, minimal_smd):
-        """ShoulderMinimal must use the same materialLayers IDs as ShoulderPrototype."""
-        proto = _load_smd(SHOULDER_SMD)
-        proto_layers = proto.get("materialLayers", {})
+    def test_material_layers_match_expected_values(self, minimal_smd):
+        """ShoulderMinimal materialLayers must match the canonical values."""
+        expected = {
+            "boundary": 1, "skinSurface": 2, "incisionEdge": 3,
+            "subcutaneous": 4, "deepBed": 5, "muscle": 6,
+            "periosteum": 7, "periosteumUndermined": 8,
+            "undermineMarker": 10, "tendon": 11,
+            "jointCapsule": 12, "boneSurface": 13,
+        }
         minimal_layers = minimal_smd.get("materialLayers", {})
-        for key in minimal_layers:
-            if key in proto_layers:
-                assert minimal_layers[key] == proto_layers[key], (
-                    f"materialLayers['{key}'] differs: minimal={minimal_layers[key]} "
-                    f"vs prototype={proto_layers[key]}"
-                )
+        for key, val in expected.items():
+            assert minimal_layers.get(key) == val, (
+                f"materialLayers['{key}'] = {minimal_layers.get(key)}, expected {val}"
+            )

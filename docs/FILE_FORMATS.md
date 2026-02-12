@@ -47,7 +47,7 @@ These are encoded with three fields that together uniquely identify a point:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `material` | Integer | Material ID of the triangle (typically 2 for skin surface; 4 for deep bed; 8 for periosteal). |
+| `material` | Integer | Material ID of the triangle (typically 2 for skin surface; 5 for deep bed; 8 for periosteal). |
 | `historyTexture` | Array of 2 floats | Texture-space UV coordinates `[u, v]` in the range [0, 1]. |
 | `displacement` | Array of 3 floats | Spatial displacement vector `[x, y, z]` from the rest-pose position. Usually `[0, 0, 0]` when recorded before physics deformation. |
 
@@ -1048,14 +1048,20 @@ A minimal `.smd` scene file:
 
 Material IDs used across both formats:
 
-| ID | Meaning |
-|----|---------|
-| 2 | Skin surface (primary operable tissue) |
-| 3-6 | Internal material layers |
-| 4 | Deep bed surface |
-| 7 | Periosteum (pre-undermine) |
-| 8 | Periosteum (post-undermine) |
-| 10 | Temporary marking during undermine operations |
+| ID | Name | In OBJ? | Meaning |
+|----|------|---------|---------|
+| 1 | boundary | Yes | Peripheral anchors at mesh edge |
+| 2 | skinSurface | Yes | Skin surface (primary operable tissue) |
+| 3 | incisionEdge | No (runtime) | Created during incision |
+| 4 | subcutaneous | No (runtime) | Flap underside / subcutaneous fat |
+| 5 | deepBed | No (runtime via .bed) | Deep tissue bed, created from `.bed` mapping |
+| 6 | muscle | No (runtime) | Deep cut muscle layer |
+| 7 | periosteum | Yes | Periosteum (pre-undermine), fixed anchors |
+| 8 | periosteumUndermined | No (runtime) | Periosteum (post-undermine) |
+| 10 | undermineMarker | No (runtime) | Temporary marking during undermine operations |
+| 11 | tendon | No | Shoulder extension: tendon tissue |
+| 12 | jointCapsule | No | Shoulder extension: joint capsule |
+| 13 | boneSurface | No | Shoulder extension: exposed bone |
 
 ---
 

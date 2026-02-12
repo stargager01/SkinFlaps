@@ -74,42 +74,41 @@ class TestModelFileAccess:
         with open(smd_path, "r") as f:
             return json.load(f)
 
-    @pytest.mark.parametrize("smd_file", ["ShoulderPrototype.smd", "FacialFlaps.smd"])
+    @pytest.mark.parametrize("smd_file", ["ShoulderMinimal.smd", "FacialFlaps.smd"])
     def test_smd_file_exists(self, smd_file):
         smd_path = os.path.join(MODEL_DIR, smd_file)
         assert os.path.isfile(smd_path), f"Scene file not found: {smd_path}"
 
     def test_shoulder_textures_accessible_with_forward_slash(self):
         """Simulate Linux path construction: Model/ + filename."""
-        smd = self._load_smd("ShoulderPrototype.smd")
+        smd = self._load_smd("ShoulderMinimal.smd")
         for texture_name in smd["textureFiles"]:
             path = MODEL_DIR + "/" + texture_name
             assert os.path.isfile(path), f"Texture not found at: {path}"
 
     def test_shoulder_static_objs_accessible(self):
-        smd = self._load_smd("ShoulderPrototype.smd")
-        for obj_name in smd["staticObjects"]:
+        smd = self._load_smd("ShoulderMinimal.smd")
+        for obj_name in smd.get("staticObjects", {}):
             path = MODEL_DIR + "/" + obj_name
             assert os.path.isfile(path), f"Static OBJ not found at: {path}"
 
     def test_shoulder_dynamic_objs_accessible(self):
-        smd = self._load_smd("ShoulderPrototype.smd")
+        smd = self._load_smd("ShoulderMinimal.smd")
         for obj_name in smd["dynamicObjects"]:
             path = MODEL_DIR + "/" + obj_name
             assert os.path.isfile(path), f"Dynamic OBJ not found at: {path}"
 
     def test_shoulder_shader_accessible(self):
-        smd = self._load_smd("ShoulderPrototype.smd")
+        smd = self._load_smd("ShoulderMinimal.smd")
         shader_name = smd.get("fragmentShader", "shoulderFragmentShader.txt")
         path = MODEL_DIR + "/" + shader_name
         assert os.path.isfile(path), f"Fragment shader not found at: {path}"
 
     def test_shoulder_subset_objs_accessible(self):
-        smd = self._load_smd("ShoulderPrototype.smd")
-        if "tetrahedralSubsets" in smd:
-            for obj_name in smd["tetrahedralSubsets"]:
-                path = MODEL_DIR + "/" + obj_name
-                assert os.path.isfile(path), f"Tet subset OBJ not found at: {path}"
+        smd = self._load_smd("ShoulderMinimal.smd")
+        for obj_name in smd.get("tetrahedralSubsets", {}):
+            path = MODEL_DIR + "/" + obj_name
+            assert os.path.isfile(path), f"Tet subset OBJ not found at: {path}"
 
     def test_shoulder_bed_file_accessible(self):
         """The .bed file must exist for deep cut/undermine operations."""
@@ -121,7 +120,7 @@ class TestModelFileAccess:
         path = MODEL_DIR + "/mtVertexShader.txt"
         assert os.path.isfile(path), f"Vertex shader not found at: {path}"
 
-    @pytest.mark.parametrize("smd_file", ["ShoulderPrototype.smd", "FacialFlaps.smd"])
+    @pytest.mark.parametrize("smd_file", ["ShoulderMinimal.smd", "FacialFlaps.smd"])
     def test_all_texture_ids_match(self, smd_file):
         """Texture IDs referenced in objects must be defined in textureFiles."""
         smd = self._load_smd(smd_file)

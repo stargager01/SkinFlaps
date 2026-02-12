@@ -239,7 +239,8 @@ SurgicalSimGui (Main UI Container - imgui-based)
 
 ### Overview
 The simulator has been generalized to support multiple anatomies beyond facial surgery.
-A prototype shoulder surgery module is included for pipeline validation.
+A shoulder surgery module is included with the same single-shell OBJ architecture
+as the facial model (materials {1, 2, 7} in OBJ, deep bed via `.bed` file).
 
 ### Architecture Changes for Multi-Anatomy Support
 - `SurgicalSimGui` (renamed from `FacialFlapsGui`) - anatomy-agnostic GUI class
@@ -248,18 +249,19 @@ A prototype shoulder surgery module is included for pipeline validation.
 - `AnatomyType` enum (`FACIAL`, `SHOULDER`, `GENERIC`) - auto-detected from scene name
 - Configurable fragment shader selection per anatomy type
 
-### Shoulder Prototype Models (Model/)
-| File | Faces | Purpose |
-|---|---|---|
-| `ShoulderSkin.obj` | 768 | Half-ellipsoid skin dome with UV mapping |
-| `ShoulderDeepBed.obj` | 480 | Fascial separation plane |
-| `ShoulderMuscle_deltoid.obj` | 640 | Closed manifold deltoid volume (tetSubset) |
-| `ShoulderTendon_supraspinatus.obj` | 300 | Closed manifold supraspinatus tendon (tetSubset) |
-| `ShoulderBone_humerus.obj` | 288 | Humeral head collision sphere |
-| `ShoulderBone_glenoid.obj` | 180 | Glenoid socket dish |
-| `ShoulderBone_acromion.obj` | 96 | Acromion plate |
-| `ShoulderPrototype.smd` | -- | Scene file with shoulder physics parameters |
-| `shoulderFragmentShader.txt` | -- | Shader with tendon/capsule/bone materials |
+### Shoulder Model Files (Model/)
+| File | Verts | Faces | Purpose |
+|---|---|---|---|
+| `ShoulderSkin.obj` | 386 | 768 | Dynamic: single-shell dome (mat 1:24, 2:720, 7:24) |
+| `ShoulderSkin.bed` | -- | -- | Deep bed mapping (386 entries, one per vertex) |
+| `ShoulderDeepBed.obj` | 242 | 480 | Reference only (for `.bed` generation, not loaded at runtime) |
+| `ShoulderMuscle_deltoid.obj` | -- | 640 | Closed manifold deltoid volume (tetSubset) |
+| `ShoulderTendon_supraspinatus.obj` | -- | 300 | Closed manifold supraspinatus tendon (tetSubset) |
+| `ShoulderBone_humerus.obj` | -- | 288 | Humeral head collision sphere |
+| `ShoulderBone_glenoid.obj` | -- | 180 | Glenoid socket dish |
+| `ShoulderBone_acromion.obj` | -- | 96 | Acromion plate |
+| `ShoulderMinimal.smd` | -- | -- | Scene file with shoulder physics parameters |
+| `shoulderFragmentShader.txt` | -- | -- | Shader with tendon/capsule/bone materials |
 
 ### Shoulder Tissue Regions
 | Region | stretchMin | stretchMax | Stiffness | Notes |

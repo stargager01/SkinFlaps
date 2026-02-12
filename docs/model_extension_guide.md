@@ -7,7 +7,7 @@ for adding new anatomical models.
 
 **Related documentation:**
 - [FILE_FORMATS.md](FILE_FORMATS.md) — `.smd` and `.hst` JSON schema reference
-- [shoulder_surgery_guide.md](shoulder_surgery_guide.md) — Shoulder prototype details
+- [shoulder_surgery_guide.md](shoulder_surgery_guide.md) — Shoulder model details
 - [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — Build environment setup
 
 ---
@@ -176,169 +176,113 @@ bccTetScene::loadScene()
 
 ---
 
-### Phase 3: Multi-Layer OBJ Merge
+### Phase 3: Material Region Assignment
 
-**Problem:** ShoulderMinimal's `ShoulderSkin.obj` had only material 2 (skin surface).
-Hook/knife operations crashed because the physics solver had no fixed vertices
-and the incision system had no deep bed topology.
+**Problem:** ShoulderMinimal's `ShoulderSkin.obj` originally had only material 2
+(skin surface). Hook/knife operations crashed because the physics solver had no
+fixed vertices (no boundary or periosteum faces).
 
-**Solution:** Merge skin and deep bed OBJ files into a single multi-layer mesh.
+**Solution:** Assign material regions to the existing single-shell dome OBJ,
+matching the facial model architecture:
 
 **Before (single-layer, broken):**
 ```
-ShoulderSkin.obj:    386 verts, 768 faces, usemtl 2 only
-ShoulderDeepBed.obj: 242 verts, 480 faces, usemtl 5 only (separate file)
+ShoulderSkin.obj: 386 verts, 768 faces, usemtl 2 only
 ```
 
-**After (multi-layer, working):**
+**After (material regions assigned, working):**
 ```
-ShoulderSkin.obj: 628 verts, 1248 faces
-  usemtl 1 →  24 faces (boundary: skin bottom fan → peripheral anchors)
-  usemtl 2 → 744 faces (skin surface: main skin mesh)
-  usemtl 5 → 460 faces (deep bed: inner tissue surface)
-  usemtl 7 →  20 faces (periosteum: deep bed bottom fan → fixed anchors)
+ShoulderSkin.obj: 386 verts, 768 faces
+  usemtl 1 →  24 faces (boundary: bottom fan at y=0 → peripheral anchors)
+  usemtl 2 → 720 faces (skin surface: main body)
+  usemtl 7 →  24 faces (periosteum: top fan near apex → fixed anchors)
 ```
 
-**Merge strategy:**
-1. Skin vertices (1–386) kept as-is
-2. Deep bed vertices appended (387–628) with index offset
-3. Skin bottom fan faces (24) relabeled from material 2 → material 1
-4. Deep bed bottom fan faces (20) relabeled from material 5 → material 7
-5. `.bed` file unchanged (maps skin vertex indices 0–385 only)
+**Deep bed:** Defined via `ShoulderSkin.bed` (386 entries mapping each skin
+vertex to its deep bed position), NOT as OBJ faces. Material 5 is created
+at runtime during undermining/deep cuts — identical to the facial model.
+
+**Key insight:** The facial model `unilatCompleteCleft.obj` also has ONLY
+materials {1, 2, 7} in the OBJ. Material 5 is never stored in the OBJ file.
 
 **Lattice resolution** also increased (`nTetSizeLevels: 1→2`, `maxDimMegatetSubdivs: 10→16`)
 to provide sub-megatet tetrahedra needed for topology operations.
 
 ---
 
-### Phase 3a: Disconnected Shells Fix
+### Phase 3a: Why Embedding Deep Bed in OBJ Fails
 
-**Problem:** The Phase 3 merge created a valid multi-material OBJ, but the BCC
-lattice builder crashed during `getConnectedComponents()` with a
-`Solid ordering error`.
+During development, an approach was attempted to merge the deep bed geometry
+directly into the OBJ as material 5 faces. This created a dual-shell OBJ
+(skin dome + deep bed dome) that crashed the BCC lattice builder.
 
-**Root cause:** The merged OBJ contained **two disconnected closed shells**
-nested inside each other — the skin dome and the deep bed dome had no shared
-vertices or edges. Each was a topologically independent closed sphere
-(Euler characteristic V-E+F = 2, zero boundary edges).
+**Root cause:** Two disconnected closed shells nested inside each other —
+the BCC tet cutter's `getConnectedComponents()` assumes a single connected
+surface. Two independent shells create ambiguous solid-ordering.
 
 ```
-Phase 3 merge (BROKEN):
+BROKEN: Two disconnected shells
 
-  ╭─── skin shell (mat 1+2) ────╮     Shell 1: 768 faces, 386 verts
-  │  closed sphere, Euler=2     │     ← no connection
-  │                              │
-  │  ╭── deep bed shell ──╮     │     Shell 2: 480 faces, 242 verts
+  ╭─── skin shell (mat 1+2) ────╮     Shell 1: closed sphere
+  │                              │     ← no connection
+  │  ╭── deep bed shell ──╮     │     Shell 2: closed sphere
   │  │  (mat 5+7)         │     │     ← no connection
-  │  │  closed sphere     │     │
   │  ╰────────────────────╯     │     Shared vertices: 0
-  ╰──────────────────────────────╯     Shared edges: 0
+  ╰──────────────────────────────╯     → "Solid ordering error" crash
 ```
 
-**Why the BCC tet cutter fails:** The `getConnectedComponents()` function
-(vnBccTetCutter_tbb.cpp:1608) processes triangles within each BCC tetrahedron.
-When a tet edge passes through both shells, the algorithm finds 4 intersection
-points and attempts to determine solid/outside alternation. Two independent
-nested shells create ambiguous solid-ordering — especially where both bottom
-caps overlap at the y=0 plane and the two pole vertices coincide at the
-origin (0,0,0).
+**Lesson learned:** Dynamic OBJ files must be a single closed surface with
+materials {1, 2, 7} only. Deep bed is always defined via `.bed` file and
+material 5 is assigned at runtime during cutting operations. This matches
+the proven facial model architecture.
 
-```
-Tet edge crossing two shells:
-  outside → skin_enter → solid → skin_exit → gap → deepbed_enter → solid → deepbed_exit
-
-The algorithm expects a SINGLE connected solid, not nested independent shells.
-The coincident bottom-cap geometry at y=0 makes intersection ordering ambiguous.
-```
-
-**Diagnosis log** (scene loading stops here):
-```
-makeFirstVnTets: getConnectedComponents (tetTriVec.size=969)
-<-- crash: Solid ordering error in getConnectedComponents()
-```
-
-**Solution:** Convert the two shells into a **single closed manifold** by:
-
-1. **Remove bottom caps** — delete the 24 skin fan faces (mat 1) and 20 deep bed
-   fan faces (mat 7), plus the two pole vertices (v386 at origin, v628 at origin).
-   This opens both domes at the bottom rim.
-
-2. **Reverse deep bed face winding** — the deep bed is the inner surface of the
-   tissue volume. For a consistent closed manifold, its normals must point inward
-   (toward the body center), which is the opposite of the original outward winding.
-   Reverse each face's vertex order: `f a/a b/b c/c` → `f a/a c/c b/b`.
-
-3. **Add connecting boundary strip** — stitch the skin rim (24 vertices, radius
-   ~10/6) to the deep bed rim (20 vertices, radius ~8.5/4.5) with triangulated
-   faces using angle-based vertex matching. Label these as material 1 (boundary).
-
-4. **Reassign periosteum** — with the bottom fan removed, designate some deep bed
-   faces near the apex (top 1-2 rings) as material 7 (periosteum) for fixed
-   physics anchoring.
-
-```
-Phase 3a fix (CORRECT):
-
-  ╭──── skin (mat 2) ──────────╮     Open dome (no bottom cap)
-  │                              │
-  ├── boundary strip (mat 1) ──┤     Connecting strip rim-to-rim
-  │  (skin rim ↔ deep bed rim) │     ~44 triangles stitching 24↔20 verts
-  │                              │
-  │  periosteum (mat 7) apex    │     Top ring(s) of deep bed
-  ├── deep bed (mat 5) ────────┤     Reversed winding (inward normals)
-  ╰──────────────────────────────╯
-  Single closed manifold, Euler=2, 1 connected component
-```
-
-**Validation requirements after fix:**
+**Validation requirements for any dynamic OBJ:**
 - Connected components = 1 (single manifold)
 - Euler characteristic V-E+F = 2 (closed surface, genus 0)
 - Boundary edges = 0 (every edge shared by exactly 2 faces)
 - Consistent winding verified by `validate_obj.py`
+- Materials: only 1 (boundary), 2 (skin), 7 (periosteum)
 
 ---
 
-## 4. Multi-Layer OBJ Structure
+## 4. Dynamic OBJ Structure
 
 ### Material ID Assignment
 
-The OBJ file uses `usemtl <id>` directives to assign tissue types to face groups.
-All layers share a single vertex pool:
+The dynamic OBJ file uses `usemtl <id>` directives to assign tissue types to
+face groups. All faces share a single vertex pool:
 
 ```
-# Merged multi-layer OBJ structure
-v ...          ← skin vertices (1 to N_skin)
-v ...          ← deep bed vertices (N_skin+1 to N_total)
-vt ...         ← texture coordinates (same ordering)
+# Dynamic OBJ structure (single closed manifold)
+v ...          ← all vertices in a single shell
+vt ...         ← texture coordinates
 
-usemtl 1       ← boundary faces (edge anchors)
+usemtl 1       ← boundary faces (peripheral anchors)
 f ...
 
 usemtl 2       ← skin surface faces (surgical layer)
-f ...
-
-usemtl 5       ← deep bed faces (undermining layer)
 f ...
 
 usemtl 7       ← periosteum faces (fixed anchors)
 f ...
 ```
 
-### Required vs. Optional Materials
+### Materials in OBJ vs. Runtime
 
-| ID | Name | Required? | Purpose |
-|----|------|-----------|---------|
+| ID | Name | In OBJ? | Purpose |
+|----|------|---------|---------|
 | 1 | boundary | **Yes** | `fixPeriostealPeriferalVertices()` sets peripheral anchors |
 | 2 | skinSurface | **Yes** | The layer users interact with (incisions, hooks) |
 | 3 | incisionEdge | No (runtime) | Created dynamically during `skinCut()` |
 | 4 | subcutaneous | No (runtime) | Created dynamically during `skinCut()` |
-| 5 | deepBed | **Yes** | Flap bottom topology for `topDeepSplit()` |
-| 6 | muscle | No | Intermediate tissue layer |
+| 5 | deepBed | **No (runtime via .bed)** | Created from `.bed` mapping during undermining/deep cuts |
+| 6 | muscle | No (runtime) | Intermediate tissue layer |
 | 7 | periosteum | **Yes** | `fixPeriostealPeriferalVertices()` sets fixed anchors |
-| 8 | periosteumUndermined | No | Periosteum after undermining |
-| 10 | undermineMarker | No | Marks undermined boundaries |
+| 8 | periosteumUndermined | No (runtime) | Periosteum after undermining |
+| 10 | undermineMarker | No (runtime) | Marks undermined boundaries |
 
-**Minimum viable model:** Materials 1, 2, 5, 7 must be present in the OBJ.
+**Minimum viable model:** Materials 1, 2, 7 must be present in the OBJ.
+Material 5 (deep bed) is defined via the `.bed` file and assigned at runtime.
 
 ### Critical: Single Manifold Requirement
 
@@ -382,17 +326,24 @@ fixPeriostealPeriferalVertices() in bccTetScene.cpp:
 If both arrays are empty → solver has no constraints → CRASH
 ```
 
-### Facial Model Reference
+### Model Reference: Facial vs. ShoulderMinimal
 
-The working facial OBJ files demonstrate the expected multi-layer structure:
+Both models follow the same single-shell architecture with materials {1, 2, 7}
+in the OBJ and deep bed defined via `.bed` file:
 
-```
-unilatCompleteCleft_3.obj:
-  usemtl 1  →    425 faces (boundary)
-  usemtl 2  → 15,299 faces (skin surface)
-  usemtl 7  →  1,654 faces (periosteum)
-  Total: 8,691 shared vertices, 17,378 faces
-```
+| Property | Facial (unilatCompleteCleft.obj) | Shoulder (ShoulderSkin.obj) |
+|----------|----------------------------------|---------------------------|
+| Vertices | 8,691 | 386 |
+| Total faces | 17,378 | 768 |
+| Material 1 (boundary) | 425 faces | 24 faces |
+| Material 2 (skin) | 15,299 faces | 720 faces |
+| Material 7 (periosteum) | 1,654 faces | 24 faces |
+| Material 5 in OBJ | **No** | **No** |
+| Deep bed source | `.bed` file | `.bed` file (386 entries) |
+| Deep bed reference OBJ | `unilatCompleteCleft_deepBed.obj` | `ShoulderDeepBed.obj` |
+| Scene file | `FacialFlaps.smd` | `ShoulderMinimal.smd` |
+| Lattice: nTetSizeLevels | 4 | 2 |
+| Lattice: maxDimMegatetSubdivs | 31 | 16 |
 
 ---
 
@@ -409,14 +360,14 @@ unilatCompleteCleft_3.obj:
 
 #### Step 1: Prepare OBJ Files
 
-Create separate OBJ files for each tissue layer:
+Create the skin surface OBJ and a reference deep bed OBJ (for `.bed` generation):
 
 ```bash
 # Example file structure
 Model/
-  NewSkin.obj          # Material 2 (skin surface)
-  NewDeepBed.obj       # Material 5 (deep bed)
-  NewSkin.bed           # Closest-point projection from skin to deep bed
+  NewSkin.obj          # Materials 1, 2, 7 (single closed manifold)
+  NewDeepBed.obj       # Reference only (for .bed generation, not loaded at runtime)
+  NewSkin.bed          # Closest-point projection from skin vertices to deep bed
 ```
 
 **OBJ requirements:**
@@ -424,32 +375,29 @@ Model/
 - Consistent outward winding (validate with `tests/validate_obj.py`)
 - Vertex/texcoord format: `f vi/ti vi/ti vi/ti`
 
-#### Step 2: Merge into Single-Manifold Multi-Layer OBJ
+#### Step 2: Assign Material Regions to OBJ
 
-Use the merge tool or create a custom script:
+Assign boundary (mat 1), skin (mat 2), and periosteum (mat 7) regions to the
+single-shell OBJ. Use the merge tool or assign manually:
 
 ```bash
 python3 tools/merge_shoulder_layers.py
 ```
 
-The merge produces a **single closed manifold** (not two separate shells):
-1. Reads skin OBJ (material 2) and deep bed OBJ (material 5)
-2. Removes bottom caps (fan faces around pole vertices) from both
-3. Reverses deep bed face winding (inner surface normals must point inward)
-4. Creates boundary strip (material 1) connecting skin rim to deep bed rim
-5. Relabels deep bed apex faces as periosteum (material 7)
-6. Outputs a single connected OBJ with all layers edge-connected
+The tool assigns material regions to a single closed manifold:
+1. **Boundary (mat 1):** Faces at the edge/rim of the surgical field (peripheral anchors)
+2. **Skin surface (mat 2):** Main body faces (user interaction layer)
+3. **Periosteum (mat 7):** Faces near bone/immovable structures (fixed anchors)
 
-**Validation after merge:**
+**Do NOT embed deep bed geometry in the OBJ.** Material 5 is created at runtime
+from the `.bed` file mapping. Embedding deep bed faces creates disconnected shells
+that crash the BCC tet cutter (see Phase 3a).
+
+**Validation after assignment:**
 ```bash
+python3 tests/validate_obj.py Model/NewSkin.obj
 # Must report: 1 connected component, Euler=2, 0 boundary edges
-python3 -c "... connected-component analysis ..."
 ```
-
-**For non-dome geometries**, identify boundary and periosteum faces manually:
-- **Boundary (mat 1):** Faces that bridge the skin and deep bed layers at the rim
-- **Periosteum (mat 7):** Deep bed faces adjacent to bone or immovable structures
-- **Critical:** All layers must be edge-connected into one manifold
 
 #### Step 3: Create the .bed File
 
@@ -520,14 +468,14 @@ python3 -m pytest tests/ -v
 ```
 
 **Validation checklist:**
-- [ ] OBJ has materials 1, 2, 5, 7 (minimum)
+- [ ] OBJ has materials 1, 2, 7 (minimum) — **NO material 5 in OBJ**
 - [ ] **Single connected component** (all faces reachable via shared edges)
 - [ ] **Euler characteristic V-E+F = 2** (closed manifold, genus 0)
 - [ ] **Zero boundary edges** (every edge shared by exactly 2 faces)
-- [ ] Consistent face winding (outward on skin, inward on deep bed)
+- [ ] Consistent face winding (outward-facing normals)
 - [ ] All face vertex indices are in range
 - [ ] No degenerate faces (duplicate vertex indices)
-- [ ] `.bed` entry count matches skin vertex count
+- [ ] `.bed` entry count matches OBJ vertex count
 - [ ] `.bed` coordinates are inside the OBJ bounding box
 - [ ] `.smd` JSON is valid and references existing files
 - [ ] `nTetSizeLevels >= 2` for topology operations
@@ -625,16 +573,20 @@ a valid solution. `fixPeriostealPeriferalVertices()` scans for material 1
 With only material 2 (skin), both arrays were empty, making the stiffness
 matrix singular.
 
-For knife operations, `createFlapTopBottomVertices()` needs a deep bed surface
-(material 5) to create the bottom layer of a skin flap. Without it, the
-incision topology operations fail.
+For knife operations, `createFlapTopBottomVertices()` needs deep bed data
+(from the `.bed` file) to create material 5 faces at runtime for the bottom
+layer of a skin flap. Without a `.bed` file, the incision topology operations fail.
 
-### Q: Can I load the deep bed as a separate static object?
+### Q: How does the deep bed work if it's not in the OBJ?
 
-No. Static objects are sent to the GPU for rendering only. They are never
-added to `materialTriangles` (`_mt`), which is the data structure used by the
-incision system, physics solver, and collision detection. The deep bed
-geometry **must** be part of the same dynamic OBJ file as the skin surface.
+The deep bed is defined via the `.bed` file, which maps each skin vertex to
+its corresponding deep bed 3D position. During undermining and deep cut
+operations, the system creates material 5 (deep bed) faces at runtime using
+these positions. This is the same mechanism used by the facial model.
+
+The deep bed reference OBJ (e.g., `ShoulderDeepBed.obj`) is used only during
+`.bed` file generation via closest-point projection. It is NOT loaded by the
+simulator at runtime.
 
 ### Q: How do I write a `.smd` file from scratch?
 
@@ -717,6 +669,7 @@ anatomy-specific material types beyond the core facial set.
 
 ---
 
-*Document version: 2026-02-12 v2. Covers materialLayerConfig refactoring (Phase 1),
-configurable .smd loading (Phase 2), multi-layer OBJ merge (Phase 3), and
-disconnected shells fix (Phase 3a).*
+*Document version: 2026-02-12 v3. Covers materialLayerConfig refactoring (Phase 1),
+configurable .smd loading (Phase 2), material region assignment (Phase 3), and
+single-shell architecture rule. Updated to reflect that material 5 (deep bed)
+is runtime-assigned via .bed file, never stored in OBJ files.*

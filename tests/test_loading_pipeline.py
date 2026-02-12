@@ -234,15 +234,15 @@ class TestMinimalTestPipeline:
         assert "textureFiles" in smd
 
 
-class TestShoulderPrototypePipeline:
-    """Validate ShoulderPrototype.smd passes all loading pipeline steps."""
+class TestShoulderMinimalPipeline:
+    """Validate ShoulderMinimal.smd passes all loading pipeline steps."""
 
     def test_shoulder_full_pipeline(self):
-        ok, errors = simulate_load_scene("ShoulderPrototype.smd")
-        assert ok, f"ShoulderPrototype.smd pipeline failed:\n" + "\n".join(errors)
+        ok, errors = simulate_load_scene("ShoulderMinimal.smd")
+        assert ok, f"ShoulderMinimal.smd pipeline failed:\n" + "\n".join(errors)
 
     def test_shoulder_anatomy_detected(self):
-        with open(os.path.join(MODEL_DIR, "ShoulderPrototype.smd")) as f:
+        with open(os.path.join(MODEL_DIR, "ShoulderMinimal.smd")) as f:
             smd = json.load(f)
         name = smd.get("sceneName", "")
         assert "Shoulder" in name or "shoulder" in name
@@ -261,7 +261,7 @@ class TestLoadSceneStepByStep:
 
     @pytest.fixture
     def shoulder_smd(self):
-        with open(os.path.join(MODEL_DIR, "ShoulderPrototype.smd")) as f:
+        with open(os.path.join(MODEL_DIR, "ShoulderMinimal.smd")) as f:
             return json.load(f)
 
     def test_step1_json_parse(self, shoulder_smd):

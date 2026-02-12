@@ -52,16 +52,13 @@ def read_obj(path):
 
 
 def main():
-    skin_source = os.path.join(MODEL_DIR, "ShoulderSkin_single_layer.obj")
     skin_output = os.path.join(MODEL_DIR, "ShoulderSkin.obj")
 
+    # Use existing ShoulderSkin.obj as input (assign material regions in-place)
+    skin_source = skin_output
     if not os.path.exists(skin_source):
-        if os.path.exists(skin_output):
-            shutil.copy2(skin_output, skin_source)
-            print(f"Backed up original to ShoulderSkin_single_layer.obj")
-        else:
-            print(f"ERROR: Neither {skin_source} nor {skin_output} found")
-            sys.exit(1)
+        print(f"ERROR: {skin_source} not found")
+        sys.exit(1)
 
     # Read source OBJ (single-layer dome: 386 verts, 768 faces, all material 2)
     verts, texcoords, faces = read_obj(skin_source)

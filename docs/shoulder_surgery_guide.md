@@ -12,12 +12,12 @@ The shoulder extension reuses the same Projective Dynamics physics engine, multi
 
 1. Launch the SkinFlaps application.
 2. Select **File > Load Scene** from the menu bar.
-3. Navigate to the `Model/` directory and select `ShoulderPrototype.smd`.
+3. Navigate to the `Model/` directory and select `ShoulderMinimal.smd`.
 
 The loader performs the following steps automatically:
 
-- Parses the JSON scene descriptor (`ShoulderPrototype.smd`).
-- Detects `AnatomyType::SHOULDER` from the `"sceneName": "ShoulderPrototype"` field (any scene name containing "Shoulder" or "shoulder" triggers this).
+- Parses the JSON scene descriptor (`ShoulderMinimal.smd`).
+- Detects `AnatomyType::SHOULDER` from the `"sceneName": "ShoulderMinimal"` field (any scene name containing "Shoulder" or "shoulder" triggers this).
 - Loads the dynamic skin object (`ShoulderSkin.obj`) and its associated deep bed file (`ShoulderSkin.bed`).
 - Loads static bone collision objects (humerus, glenoid, acromion).
 - Loads texture maps (`diffuse2.jpg`, `normal.jpg`).
@@ -30,7 +30,10 @@ The loader performs the following steps automatically:
 
 ## 3. Anatomy Overview
 
-The shoulder model consists of 7 OBJ files organized into three categories:
+The shoulder model uses 7 OBJ files organized into three categories.
+**Note:** `ShoulderMinimal.smd` loads only the dynamic object (`ShoulderSkin.obj`).
+The full prototype with static bones and tetrahedral subsets has been removed.
+Static objects and tet subsets can be added back to `.smd` as needed.
 
 ### Dynamic Object (Deformable)
 
@@ -53,11 +56,12 @@ The shoulder model consists of 7 OBJ files organized into three categories:
 | `ShoulderMuscle_deltoid.obj` | Closed manifold defining the spatial extent of the deltoid muscle within the tetrahedral lattice. Tetrahedra inside this volume receive deltoid-specific strain limits and stiffness. |
 | `ShoulderTendon_supraspinatus.obj` | Closed manifold defining the supraspinatus tendon region. Tetrahedra within this volume are assigned high stiffness and narrow strain limits to model the relatively inextensible tendon tissue. |
 
-### Deep Bed Surface
+### Deep Bed Reference (Not Loaded at Runtime)
 
 | File | Description |
 |------|-------------|
-| `ShoulderDeepBed.obj` | Deep tissue bed surface used as the undermining reference plane. The associated `.bed` file (`ShoulderSkin.bed`) stores the precomputed mapping between skin surface vertices and their deep bed projections. |
+| `ShoulderDeepBed.obj` | Reference-only deep bed surface used to generate `ShoulderSkin.bed` (via closest-point projection). **Not loaded by the simulator.** Material 5 (deep bed) is assigned at runtime from the `.bed` mapping during undermining/deep cut operations. |
+| `ShoulderSkin.bed` | 386 entries mapping each skin vertex to its deep bed 3D position. Auto-detected by the loader (must match the dynamic OBJ base name). |
 
 ---
 
@@ -93,7 +97,7 @@ In the default `materialLayerConfig`, the shoulder extension fields (`tendon`, `
 
 ## 5. Tissue Regions
 
-The shoulder model defines 5 tissue regions in the `"tissueRegions"` section of `ShoulderPrototype.smd`. Each region specifies strain limits (how much the tissue can compress or stretch) and optional stiffness weights. The physics solver enforces these limits during simulation.
+The shoulder model can define up to 5 tissue regions. `ShoulderMinimal.smd` currently includes only `skin_deltoid`; additional regions (and their associated tet subsets) can be added as needed. Each region specifies strain limits (how much the tissue can compress or stretch) and optional stiffness weights. The physics solver enforces these limits during simulation.
 
 | Region | minStrain | maxStrain | lowTetWeight | highTetWeight | Subset OBJ | Description |
 |--------|-----------|-----------|--------------|---------------|------------|-------------|
@@ -184,7 +188,7 @@ Tools are selected from the **Tools** menu or the on-screen toolbox. The shoulde
 
 The following is a representative step-by-step workflow for simulating a rotator cuff repair:
 
-1. **Load the scene.** File > Load Scene > `ShoulderPrototype.smd`. Wait for the tetrahedral lattice to initialize.
+1. **Load the scene.** File > Load Scene > `ShoulderMinimal.smd`. Wait for the tetrahedral lattice to initialize.
 
 2. **Inspect the anatomy.** Use the **View** tool to rotate and examine the shoulder model. Identify the skin surface, the deltoid muscle region, and the bone structures.
 
@@ -219,7 +223,7 @@ The following is a representative step-by-step workflow for simulating a rotator
 **Cause:** The scene file (`.smd`) contains a JSON parsing error. This typically occurs when a JSON value is accessed as an `Object` but is actually a different type (string, array, number, etc.), or when the JSON is malformed (missing commas, unmatched braces, trailing commas).
 
 **Solution:**
-- Validate the `.smd` file with a JSON linter (e.g., `python -m json.tool ShoulderPrototype.smd`).
+- Validate the `.smd` file with a JSON linter (e.g., `python -m json.tool ShoulderMinimal.smd`).
 - Ensure all expected object fields are present and correctly typed. In particular, `"dynamicObjects"`, `"staticObjects"`, `"tetrahedralProperties"`, and `"materialLayers"` must be JSON objects (not arrays or strings).
 - Check for trailing commas after the last element in any object or array, which are invalid in strict JSON.
 

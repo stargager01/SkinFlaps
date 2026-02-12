@@ -190,7 +190,7 @@ class TestNoRemainingHardcodedMaterialIDs:
 
 MODEL_DIR = os.path.join(PROJECT_ROOT, "Model")
 FACIAL_SMD = os.path.join(MODEL_DIR, "FacialFlaps.smd")
-SHOULDER_SMD = os.path.join(MODEL_DIR, "ShoulderPrototype.smd")
+SHOULDER_SMD = os.path.join(MODEL_DIR, "ShoulderMinimal.smd")
 SHOULDER_MINIMAL_SMD = os.path.join(MODEL_DIR, "ShoulderMinimal.smd")
 
 # The original hardcoded facial defaults
