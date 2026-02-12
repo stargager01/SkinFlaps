@@ -279,7 +279,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		}
 		else
 			tr->getBarycentricProjection(triangle, position, uv);
-		if (tr->triangleMaterial(triangle) != 2) {
+		if (tr->triangleMaterial(triangle) != _bts.getMaterialLayers().skinSurface) {
 			sendUserMessage("With this tool you can only incise from top side of skin.", "USER ERROR");
 			return true;
 		}
@@ -296,7 +296,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		if (sn->getType() != sceneNode::nodeType::MATERIAL_TRIANGLES)
 			return false;
 		materialTriangles* tr = _sg.getMaterialTriangles();
-		if (tr->triangleMaterial(triangle) != 2 && tr->triangleMaterial(triangle) != 10) {
+		if (tr->triangleMaterial(triangle) != _bts.getMaterialLayers().skinSurface && tr->triangleMaterial(triangle) != _bts.getMaterialLayers().undermineMarker) {
 			sendUserMessage("With this tool you can only undermine from top side of skin.", "USER ERROR");
 			return true;
 		}
@@ -344,10 +344,10 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		}
 		else if (triMat == 3) {
 			int aTE = tr->triAdjs(triangle)[0];
-			if (tr->triangleMaterial(aTE >> 2) > 3 && tr->triangleMaterial(aTE >> 2) < 7)
+			if (tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().subcutaneous || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().deepBed || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().muscle)
 				aTE = tr->triAdjs(triangle - 1)[0];  // incision convention
 			else
-				assert(tr->triangleMaterial(aTE >> 2) == 2);
+				assert(tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().skinSurface);
 			eTri = aTE >> 2;
 			edg = aTE & 3;
 			Vec3f V0, V1, P(position);
@@ -507,7 +507,7 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		if (sn->getType() != sceneNode::nodeType::MATERIAL_TRIANGLES)
 			return false;
 		materialTriangles* tr = _sg.getMaterialTriangles();
-		if (tr->triangleMaterial(triangle) != 2 && tr->triangleMaterial(triangle) != 5) {
+		if (tr->triangleMaterial(triangle) != _bts.getMaterialLayers().skinSurface && tr->triangleMaterial(triangle) != _bts.getMaterialLayers().deepBed) {
 			sendUserMessage("Can only deep cut from unelevated skin top or deep bed.  Try again-", "USER ERROR");
 			return true;
 		}
@@ -522,11 +522,11 @@ bool surgicalActions::rightMouseDown(std::string objectHit, float (&position)[3]
 		float pos[3], uv[2] = { 0.0f, 0.0f };
 		tr->getBarycentricProjection(triangle, position, uv);
 		// if triangle selected is material 2 which has been undermined, xRay through it to its corresponding deep bed triangle
-		if (tr->triangleMaterial(triangle) == 2 && _incisions.triangleUndermined(triangle)) {
+		if (tr->triangleMaterial(triangle) == _bts.getMaterialLayers().skinSurface && _incisions.triangleUndermined(triangle)) {
 			float tx[2];
 			tr->getBarycentricTexture(triangle, uv, tx);
 			Vec3f displ(0.0f, 0.0f, 0.0f);
-			if (!getHistoryAttachPoint(5, tx, displ, triangle, uv, false)) {
+			if (!getHistoryAttachPoint(_bts.getMaterialLayers().deepBed, tx, displ, triangle, uv, false)) {
 				std::string msg = "Can't Xray through top to a deep bed location.";
 				historyAttachFailure(msg);
 				return false;
@@ -810,10 +810,10 @@ bool surgicalActions::rightMouseUp(std::string objectHit, float (&position)[3], 
 		}
 		else if (triMat == 3) {
 			int aTE = tr->triAdjs(triangle)[0];
-			if (tr->triangleMaterial(aTE >> 2) > 3 && tr->triangleMaterial(aTE >> 2) < 7) 
+			if (tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().subcutaneous || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().deepBed || tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().muscle) 
 				aTE = tr->triAdjs(triangle - 1)[0];  // incision convention
 			else
-				assert(tr->triangleMaterial(aTE >> 2) == 2);
+				assert(tr->triangleMaterial(aTE >> 2) == _bts.getMaterialLayers().skinSurface);
 			eTri = aTE >> 2;
 			edge = aTE & 3;
 			Vec3f V0, V1, P(position);
@@ -1210,8 +1210,8 @@ void surgicalActions::onKeyDown(int key)
 				std::this_thread::sleep_for(std::chrono::milliseconds(20));
 			materialTriangles *mt = _sg.getMaterialTriangles();
 			for (int n = mt->numberOfTriangles(), i = 0; i < n; ++i){
-				if (mt->triangleMaterial(i) == 10)
-					mt->setTriangleMaterial(i, 8);  // 8 is a periosteal triangle that has been undermined
+				if (mt->triangleMaterial(i) == _bts.getMaterialLayers().undermineMarker)
+					mt->setTriangleMaterial(i, _bts.getMaterialLayers().periosteumUndermined);  // 8 is a periosteal triangle that has been undermined
 			}
 			_bts.updateSurfaceDraw();
 			while (!physicsDone)  // physics update thread must be complete before doing next op.
@@ -1861,16 +1861,16 @@ bool surgicalActions::getHistoryAttachPoint(const int material, const float(&his
 	triTex.assign(3, Vec2f());
 	Vec2f txIn(historyTexture[0], historyTexture[1]);
 	int k, n = mtp->numberOfTriangles(), matIn = material;
-	if (matIn == 8)  // make all periosteal materials 7
-		matIn = 7;
+	if (matIn == _bts.getMaterialLayers().periosteumUndermined)  // make all periosteal materials 7
+		matIn = _bts.getMaterialLayers().periosteum;
 	insidePolygon ip;
 	for (k = 0; k < n; ++k) {
-		if (material > 6) {
-			if (mtp->triangleMaterial(k) < 7)  // in an undermine periosteum may have already been labelled as 7, 8, or 10.
+		if (material == _bts.getMaterialLayers().periosteum || material == _bts.getMaterialLayers().periosteumUndermined || material == _bts.getMaterialLayers().undermineMarker) {
+			if (mtp->triangleMaterial(k) != _bts.getMaterialLayers().periosteum && mtp->triangleMaterial(k) != _bts.getMaterialLayers().periosteumUndermined && mtp->triangleMaterial(k) != _bts.getMaterialLayers().undermineMarker)  // in an undermine periosteum may have already been labelled as 7, 8, or 10.
 				continue;
 		}
 		else {
-			if (mtp->triangleMaterial(k) != material && mtp->triangleMaterial(k) != 10)  // in an undermine may already have been labelled as 10
+			if (mtp->triangleMaterial(k) != material && mtp->triangleMaterial(k) != _bts.getMaterialLayers().undermineMarker)  // in an undermine may already have been labelled as 10
 				continue;
 		}
 		int *tr = mtp->triangleTextures(k);
@@ -1892,12 +1892,12 @@ bool surgicalActions::getHistoryAttachPoint(const int material, const float(&his
 		triangle = -1;
 		float dsq, minDsq = FLT_MAX;
 		for (k = 0; k < n; ++k) {
-			if (material > 6) {
-				if (mtp->triangleMaterial(k) < 7)  // in an undermine periosteum may have already been labelled as 7, 8, or 10.
+			if (material == _bts.getMaterialLayers().periosteum || material == _bts.getMaterialLayers().periosteumUndermined || material == _bts.getMaterialLayers().undermineMarker) {
+				if (mtp->triangleMaterial(k) != _bts.getMaterialLayers().periosteum && mtp->triangleMaterial(k) != _bts.getMaterialLayers().periosteumUndermined && mtp->triangleMaterial(k) != _bts.getMaterialLayers().undermineMarker)  // in an undermine periosteum may have already been labelled as 7, 8, or 10.
 					continue;
 			}
 			else {
-				if (mtp->triangleMaterial(k) != material && mtp->triangleMaterial(k) != 10)  // in an undermine may already have been labelled as 10
+				if (mtp->triangleMaterial(k) != material && mtp->triangleMaterial(k) != _bts.getMaterialLayers().undermineMarker)  // in an undermine may already have been labelled as 10
 					continue;
 			}
 			int* tr = mtp->triangleTextures(k);
@@ -2275,7 +2275,7 @@ void surgicalActions::nextHistoryAction()
 				historyAttachFailure(msg);
 				return;
 			}
-			assert(mtp->triangleMaterial(tri) == 2);
+			assert(mtp->triangleMaterial(tri) == _bts.getMaterialLayers().skinSurface);
 			mtp->getBarycentricPosition(tri, uv, positions[i].xyz);
 			mtp->getBarycentricNormal(tri, uv, normals[i].xyz);
 		}

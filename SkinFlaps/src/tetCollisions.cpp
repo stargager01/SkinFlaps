@@ -46,9 +46,9 @@ void tetCollisions::initSoftCollisions(materialTriangles* mt, vnBccTetrahedra* v
 	for (int j, n = _mt->numberOfTriangles(), i = 0; i < n; ++i) {
 		if (_mt->triangleMaterial(i) < 0)
 			continue;
-		if (_mt->triangleMaterial(i) == 4) {
+		if (_mt->triangleMaterial(i) == _matLayers.subcutaneous) {
 			for (j = 0; j < 3; ++j) {
-				if (_mt->triangleMaterial(_mt->triAdjs(i)[j] >> 2) == 5)  // triangle at hinge with flap bed. Skip it.
+				if (_mt->triangleMaterial(_mt->triAdjs(i)[j] >> 2) == _matLayers.deepBed)  // triangle at hinge with flap bed. Skip it.
 					break;
 			}
 			if (j < 3)
@@ -58,7 +58,7 @@ void tetCollisions::initSoftCollisions(materialTriangles* mt, vnBccTetrahedra* v
 				tets.insert(_vnt->getVertexTetrahedron(tr[j]));
 			_flapBotTris.push_back(i);
 		}
-		else if (_mt->triangleMaterial(i) == 5) {
+		else if (_mt->triangleMaterial(i) == _matLayers.deepBed) {
 			int* tr = _mt->triangleVertices(i);
 			std::array<int, 3> br;
 			Vec3f matPos[3];
@@ -145,7 +145,7 @@ void tetCollisions::initMidpointRays(std::unordered_map<int, int>& bedVerts, std
 	_midpointRays.reserve(512);
 
 	for (int n = _mt->numberOfTriangles(), i = 0; i < n; ++i) {
-		if (_mt->triangleMaterial(i) != 5)
+		if (_mt->triangleMaterial(i) != _matLayers.deepBed)
 			continue;
 		int* tr = _mt->triangleVertices(i);
 		// Process each edge of this bed triangle

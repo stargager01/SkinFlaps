@@ -373,7 +373,7 @@ void sutures::laySutureLine(int suture2)
 				lens.push_back((e1 - e0).length());
 			totalLen += lens.back();  // consider a bailout length
 			e0 = e1;
-			while (mt->triangleMaterial(te >> 2) == 2)
+			while (mt->triangleMaterial(te >> 2) == _matLayers.skinSurface)
 				te = mt->triAdjs(te >> 2)[((te & 3) + (forward ? 1 : 2)) % 3];
 			te = mt->triAdjs(te >> 2)[te & 3];
 		}
@@ -494,10 +494,10 @@ void sutures::nearestSkinIncisionEdge(const float triUv[2], int &triangle, int &
 	unsigned int bestTe=0;
 	float bestParam=0.0f, minDist = FLT_MAX;
 	for (int n = mt->numberOfTriangles(), i = 0; i < n; ++i) {
-		if (mt->triangleMaterial(i) != 3)
+		if (mt->triangleMaterial(i) != _matLayers.incisionEdge)
 			continue;
 		unsigned int adj = mt->triAdjs(i)[0];
-		if (mt->triangleMaterial(adj >> 2) != 2)
+		if (mt->triangleMaterial(adj >> 2) != _matLayers.skinSurface)
 			continue;
 		const int *tr = mt->triangleVertices(i);
 		Vec3f v0, v1;

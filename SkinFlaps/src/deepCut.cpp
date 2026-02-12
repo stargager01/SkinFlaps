@@ -136,13 +136,13 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 			return true;
 		int mat = _mt->triangleMaterial(ri.triangle);
 		float uv[2] = { (float)ri.uv[0], (float)ri.uv[1] };
-		if (mat == 2) {
+		if (isSkinSurface(mat)) {
 			int topVertex, bottomVertex;
 			createFlapTopBottomVertices(ri.triangle, uv, topVertex, bottomVertex);
 			ri.mat2Vert = topVertex;
 			ri.deepVert = bottomVertex;
 		}
-		else if (mat == 1 || (mat > 4 && mat < 10)) {
+		else if (isBoundary(mat) || isDeepTissue(mat)) {
 			Vec3f gridLocus, bw;
 			int tet = _vbt->parametricTriangleTet(ri.triangle, uv, gridLocus);
 			_vbt->gridLocusToBarycentricWeight(gridLocus, _vbt->_tetCentroids[tet], bw);
@@ -324,7 +324,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 			unsigned int adj = 0xffffffff;
 			int vNow = *vit, *tr;
 			for (int nt = _mt->numberOfTriangles(), k, j = 0; j < nt; ++j) {
-				if (_mt->triangleMaterial(j) == 2)  // must be a deep triangle
+				if (isSkinSurface(_mt->triangleMaterial(j)))  // must be a deep triangle
 					continue;
 				tr = _mt->triangleVertices(j);
 				for (k = 0; k < 3; ++k) {
@@ -341,7 +341,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 			while (vit != sp.end()) {
 				int loopV = -1;
 				unsigned int topAdj, botAdj = _mt->triAdjs(adj >> 2)[adj & 3];
-				if (_mt->triangleMaterial(botAdj >> 2) == 3) {  // correct the _deepBed entry for the top node if an incision edge
+				if (isIncisionEdge(_mt->triangleMaterial(botAdj >> 2))) {  // correct the _deepBed entry for the top node if an incision edge
 					// from incision convention
 					topAdj = _mt->triAdjs(botAdj >> 2)[1];
 					if ((topAdj >> 2) + 1 != (botAdj >> 2)) {
@@ -363,7 +363,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 					adj = _mt->triAdjs(adj >> 2)[adj & 3];
 					tr = _mt->triangleVertices(adj >> 2);
 					tr[adj & 3] = oppositeSideVertices[vNow].pos;
-					if (_mt->triangleMaterial(adj >> 2) != 3) {
+					if (!isIncisionEdge(_mt->triangleMaterial(adj >> 2))) {
 						int* txp = _mt->triangleTextures(adj >> 2);
 						if (lastTx != txp[adj & 3]) {  // remember possible texture seam crossing
 							lastTx = txp[adj & 3];
@@ -397,7 +397,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 			T[0] = t.tex[0];
 			T[1] = t.tex[2];
 			T[2] = t.tex[1];
-			_mt->addTriangle(V, 6, T);
+			_mt->addTriangle(V, _matLayers.muscle, T);
 			for (int i = 0; i < 3; ++i) {
 				auto ovit = oppositeSideVertices.find(t.v[i]);
 				V[i] = ovit->second.pos;
@@ -408,7 +408,7 @@ bool deepCut::cutDeep()  // interpost connection data already loaded in _deepPos
 				else
 					T[i] = ovit->second.tex;
 			}
-			_mt->addTriangle(V, 6, T);
+			_mt->addTriangle(V, _matLayers.muscle, T);
 		}
 	};
 	for (int n = (int)_deepPosts.size(), i = 1; i < n; ++i)
@@ -1007,9 +1007,9 @@ bool deepCut::updateDeepSpatialCoordinates()
 			auto nit = nei.begin();
 			bool has4 = false, has5 = false;
 			while (nit != nei.end()) {
-				if (_mt->triangleMaterial(nit->triangle) == 5)
+				if (isDeepBed(_mt->triangleMaterial(nit->triangle)))
 					has5 = true;
-				else if (_mt->triangleMaterial(nit->triangle) == 4)
+				else if (isSubcutaneous(_mt->triangleMaterial(nit->triangle)))
 					has4 = true;
 				else
 					;
@@ -1051,9 +1051,9 @@ bool deepCut::getDeepSpatialCoordinates()
 			auto nit = nei.begin();
 			bool has4 = false, has5 = false;
 			while (nit != nei.end()) {
-				if (_mt->triangleMaterial(nit->triangle) == 5)
+				if (isDeepBed(_mt->triangleMaterial(nit->triangle)))
 					has5 = true;
-				else if (_mt->triangleMaterial(nit->triangle) == 4)
+				else if (isSubcutaneous(_mt->triangleMaterial(nit->triangle)))
 					has4 = true;
 				else
 					;
@@ -1344,7 +1344,7 @@ bool deepCut::rayIntersectMaterialTriangles(const Vec3d& rayStart, const Vec3d& 
 	// do slightly permissive find
 	for (int n = _mt->numberOfTriangles(), j, i = 0; i < n; ++i) {
 		int tm = _mt->triangleMaterial(i);
-		if (tm == 3 || tm == 4 || tm < 0)  // only look for permissible deep cut triangles.
+		if (isIncisionEdge(tm) || isSubcutaneous(tm) || tm < 0)  // only look for permissible deep cut triangles.
 			continue;
 		int* tr = _mt->triangleVertices(i);
 		tbb.Empty_Box();
@@ -1391,9 +1391,9 @@ bool deepCut::rayIntersectMaterialTriangles(const Vec3d& rayStart, const Vec3d& 
 		if (rit == rtiMap.end())
 			break;
 		if (rit->second.solidDown == ritLast->second.solidDown && abs(rit->first - ritLast->first) < 1e-16) {  // double hit
-			if (_mt->triangleMaterial(rit->second.triangle) == 2)
+			if (isSkinSurface(_mt->triangleMaterial(rit->second.triangle)))
 				rit = rtiMap.erase(rit);
-			else if (_mt->triangleMaterial(ritLast->second.triangle) == 2)
+			else if (isSkinSurface(_mt->triangleMaterial(ritLast->second.triangle)))
 				rtiMap.erase(ritLast);
 			else  // doesn't matter which one you choose
 				rtiMap.erase(ritLast);
@@ -1442,7 +1442,7 @@ bool deepCut::rayIntersectMaterialTriangles(const Vec3d& rayStart, const Vec3d& 
 int deepCut::addPeriostealUndermineTriangle(const int triangle, const Vec3f &linePickDirection, bool incisionConnect)
 {
 	int perioTri = 0x7fffffff, mat = _mt->triangleMaterial(triangle);
-	if (mat == 7 || mat == 8 || mat == 10)  // a periosteal triangle possibly in the middle of an undermine
+	if (isPeriosteal(mat) || isUndermineMarker(mat))  // a periosteal triangle possibly in the middle of an undermine
 		perioTri = triangle;
 	else{
 		std::vector<Vec3f> positions;
@@ -1455,7 +1455,7 @@ int deepCut::addPeriostealUndermineTriangle(const int triangle, const Vec3f &lin
 			return -1;
 		for (int n = rayTris.size(), i = 0; i < n; ++i) {
 			int mat = _mt->triangleMaterial(rayTris[i]);
-			if(mat > 6){  // periosteal triangle or one already undermined
+			if(isPeriosteal(mat) || isUndermineMarker(mat)){  // periosteal triangle or one already undermined
 				perioTri = rayTris[i];
 				break;
 			}
@@ -1463,7 +1463,7 @@ int deepCut::addPeriostealUndermineTriangle(const int triangle, const Vec3f &lin
 	}
 	if (perioTri == 0x7fffffff)
 		return 0x7fffffff;
-	addUndermineTriangle(perioTri, 7, incisionConnect);
+	addUndermineTriangle(perioTri, _matLayers.periosteum, incisionConnect);
 	return perioTri;
 }
 
@@ -1632,7 +1632,7 @@ void deepCut::findCutInteriorHoles(const bilinearPatch* blp, const endPlane* ep,
 	std::list< interiorHole > holeList;
 	for (int n = _mt->numberOfTriangles(), j, i = 0; i < n; ++i) {
 		int mat = _mt->triangleMaterial(i);
-		if (mat < 0 || (mat >2 && mat < 5))
+		if (mat < 0 || isIncisionEdge(mat) || isSubcutaneous(mat))
 			continue;
 		if (trisUsed[i])
 			continue;
@@ -1748,7 +1748,7 @@ void deepCut::findCutInteriorHoles(const bilinearPatch* blp, const endPlane* ep,
 		auto te1 = _mt->triAdjs(h.te2[1] >> 2)[h.te2[1] & 3];
 		uvFromEdge(te1 & 3, 1.0 - h.param2[1], uv[1]);
 		uvt = uv[0] * 0.6667 + uv[1] * 0.3333;
-		if (mat == 2) {
+		if (isSkinSurface(mat)) {
 			createFlapTopBottomVertices(h.te2[0] >> 2, uvt.xy, cutP[0][0], cutP[0][1]);
 			newP = cutP[0][0];
 		}
@@ -1771,7 +1771,7 @@ void deepCut::findCutInteriorHoles(const bilinearPatch* blp, const endPlane* ep,
 		uvFromEdge(te1 & 3, 1.0 - h.param2[1], uv[1]);
 		uvt *= 0.5f;
 		uvt += uv[1] * 0.5f;
-		if (mat == 2)
+		if (isSkinSurface(mat))
 			createFlapTopBottomVertices(te1 >> 2, uvt.xy, cutP[1][0], cutP[1][1]);
 		else {
 			cutP[1][0] = -1;
@@ -1783,7 +1783,7 @@ void deepCut::findCutInteriorHoles(const bilinearPatch* blp, const endPlane* ep,
 		double minimumBilinearV;
 		if (surfacePathSub(cutP[1][0], cutP[1][1], cutP[0][0], cutP[0][1], h.te2[1], h.param2[1], h.uv2[1], endTriangle, blp, ep, true, scl, minimumBilinearV) == DBL_MAX)
 			throw(std::logic_error("Couldn't track a valid hole path in hole finder."));
-		if (mat == 2) {
+		if (isSkinSurface(mat)) {
 			std::list<int> topVerts, botVerts;
 			topVerts.push_back(cutP[0][0]);
 			topVerts.push_back(cutP[1][0]);
@@ -1969,7 +1969,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 		int mat;
 		for (auto& n : nei) {
 			nE = _deepXyz[n.vertex];
-			if ((mat = _mt->triangleMaterial(n.triangle)) < 3 || mat > 4) {
+			if (!isIncisionEdge(mat = _mt->triangleMaterial(n.triangle)) && !isSubcutaneous(mat)) {
 				if (!(E.X != DBL_MAX)) throw std::runtime_error("deepCut line 1973: E.X != DBL_MAX");
 				if (edgeIntersect()) {
 					tr = _mt->triangleVertices(n.triangle);
@@ -1988,7 +1988,7 @@ double deepCut::surfacePath(rayTriangleIntersect& from, const rayTriangleInterse
 	};
 	int endTriangle = to.triangle;
 	if (from.deepVert < 0) {
-		prevMat = _mt->triangleMaterial(from.triangle) == 2 ? 2 : 5;  // 5 or 6, 7, or 8
+		prevMat = isSkinSurface(_mt->triangleMaterial(from.triangle)) ? _matLayers.skinSurface : _matLayers.deepBed;  // 5 or 6, 7, or 8
 		tr = _mt->triangleVertices(from.triangle);
 		int i;
 		nE = _deepXyz[tr[0]];
@@ -2077,9 +2077,9 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 		int splitTri, splitEdge, splitMat;
 		splitTri = te >> 2, splitEdge = te & 3;
 		splitMat = _mt->triangleMaterial(splitTri);
-		if (splitMat < 2) {
-			if (splitMat > 0)
-				splitMat = 5;
+		if (isBoundary(splitMat) || splitMat == 0) {
+			if (isBoundary(splitMat))
+				splitMat = _matLayers.deepBed;
 			else if(splitMat < 0)
 				throw(std::logic_error("Trying to deep cut through a deleted triangle.|n"));
 			else
@@ -2088,7 +2088,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 		if (splitTri == endTriangle)
 			break;
 		auto tr = _mt->triangleVertices(splitTri);
-		if (splitMat == 4) {  // mat 5 march to an undermine border edge. Pop back on top
+		if (isSubcutaneous(splitMat)) {  // mat 5 march to an undermine border edge. Pop back on top
 			for (auto& db : _deepBed) {
 				if (db.second.deepMtVertex == tr[(splitEdge + 1) % 3]) {
 					std::vector<materialTriangles::neighborNode> nei;
@@ -2113,7 +2113,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 										topParams.clear();
 										topUVs.clear();
 										Tin = false;
-										prevMat = 2;
+										prevMat = _matLayers.skinSurface;
 									}
 									break;
 								}
@@ -2130,15 +2130,15 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 				}
 			}
 		}
-		else if (splitMat == 3) {  // march over an incision edge until a mat 5 or 2 triangle is found
-			if (prevMat == 2) {  // this is a T out
+		else if (isIncisionEdge(splitMat)) {  // march over an incision edge until a mat 5 or 2 triangle is found
+			if (isSkinSurface(prevMat)) {  // this is a T out
 				auto adjs = _mt->triAdjs(splitTri + 1);  // incision convention
-				if (_mt->triangleMaterial(adjs[0] >> 2) == 3) {  // non undermined incision edge
+				if (isIncisionEdge(_mt->triangleMaterial(adjs[0] >> 2))) {  // non undermined incision edge
 					auto newTin = (adjs[0] >> 2) - 1;
 					adjs = _mt->triAdjs(newTin);  // incision convention again
-					if (!(_mt->triangleMaterial(adjs[0] >> 2) == 2)) throw std::runtime_error("deepCut line 2139: _mt->triangleMaterial(adjs[0] >> 2) == 2");
+					if (!(isSkinSurface(_mt->triangleMaterial(adjs[0] >> 2)))) throw std::runtime_error("deepCut line 2139: _mt->triangleMaterial(adjs[0] >> 2) == 2");
 					te = adjs[0];
-					prevMat = 2;
+					prevMat = _matLayers.skinSurface;
 					if (cutPath) {
 						ToutTri = topTe.back() >> 2;
 						ToutParam = topParams.back();
@@ -2150,7 +2150,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 					}
 				}
 				else {
-					if (!(_mt->triangleMaterial(adjs[0] >> 2) > 4)) throw std::runtime_error("deepCut line 2153: _mt->triangleMaterial(adjs[0] >> 2) > 4");
+					if (!(isDeepTissue(_mt->triangleMaterial(adjs[0] >> 2)))) throw std::runtime_error("deepCut line 2153: _mt->triangleMaterial(adjs[0] >> 2) > 4");
 					if (cutPath) {
 						ToutTri = topTe.back() >> 2;
 						ToutParam = topParams.back();
@@ -2158,11 +2158,11 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 						deepUvStart.set(DBL_MAX, 0.0);
 					}
 					te = adjs[0];
-					prevMat = 5;
+					prevMat = _matLayers.deepBed;
 				}
 			}
 			else {  // Tin
-				if (!(prevMat == 5)) throw std::runtime_error("deepCut line 2165: prevMat == 5");
+				if (!(prevMat == _matLayers.deepBed)) throw std::runtime_error("deepCut line 2165: prevMat == 5");
 				if (cutPath) {
 					TinTri = (topTe.back() >> 2) - 1;
 					topTe.pop_back();
@@ -2173,8 +2173,8 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 				}
 				auto adjs = _mt->triAdjs((te >> 2) - 1);  // incision convention
 				te = adjs[0];
-				if (!(_mt->triangleMaterial(te >> 2) == 2)) throw std::runtime_error("deepCut line 2176: _mt->triangleMaterial(te >> 2) == 2");
-				prevMat = 2;
+				if (!(isSkinSurface(_mt->triangleMaterial(te >> 2)))) throw std::runtime_error("deepCut line 2176: _mt->triangleMaterial(te >> 2) == 2");
+				prevMat = _matLayers.skinSurface;
 			}
 			++nEdges;
 		}
@@ -2196,7 +2196,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 					auto nit = nei.begin();
 					while (nit != nei.end()) {
 						if (nit->vertex == v50) {
-							if (!(_mt->triangleMaterial(nit->triangle) == 5)) throw std::runtime_error("deepCut line 2199: _mt->triangleMaterial(nit->triangle) == 5");
+							if (!(isDeepBed(_mt->triangleMaterial(nit->triangle)))) throw std::runtime_error("deepCut line 2199: _mt->triangleMaterial(nit->triangle) == 5");
 							int* trp = _mt->triangleVertices(nit->triangle);
 							int k;
 							for (k = 0; k < 3; ++k) {
@@ -2205,7 +2205,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 							}
 							if (!(k < 3)) throw std::runtime_error("deepCut line 2206: k < 3");
 							te = (nit->triangle << 2) + k;  // deep mat 5 tris always listed in same order as the top tri that generated it.
-							prevMat = 5;
+							prevMat = _matLayers.deepBed;
 							break;
 						}
 						++nit;
@@ -2358,7 +2358,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 							Tin = false;
 							UoutTe = 3;
 						}
-						if (splitMat == 2 && prevMat > 4) {  // skin start from a boundary or periosteal edge
+						if (isSkinSurface(splitMat) && isDeepTissue(prevMat)) {  // skin start from a boundary or periosteal edge
 							topTe.pop_back();
 							float lastParam = topParams.back();
 							topParams.pop_back();
@@ -2383,9 +2383,9 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 							topUVs.clear();
 							Tin = false;
 							TinTri = -1;
-							prevMat = 2;
+							prevMat = _matLayers.skinSurface;
 						}
-						if (splitMat > 4 && prevMat == 2) {  // skin end from a boundary or periosteal edge
+						if (isDeepTissue(splitMat) && isSkinSurface(prevMat)) {  // skin end from a boundary or periosteal edge
 							unsigned int lastTe = topTe.back();
 							topTe.pop_back();
 							float lastParam = topParams.back();
@@ -2439,10 +2439,10 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 						scl.deepUVs.push_back(faceParams[0]);
 						scl.deepVertsTris.push_back(splitTri);
 					}
-					if (splitMat == 2)
-						prevMat = 2;
+					if (isSkinSurface(splitMat))
+						prevMat = _matLayers.skinSurface;
 					else
-						prevMat = 5;  // includes 1 & 5-9
+						prevMat = _matLayers.deepBed;  // includes 1 & 5-9
 					break;
 				}
 				E = nE;
@@ -2504,7 +2504,7 @@ double deepCut::surfacePathSub(int topStartV, int deepStartV, int topEndV, int d
 			TinTri = -1;
 		}
 		Vec2d toUV(DBL_MAX, 0.0);
-		if (prevMat == 2) {
+		if (isSkinSurface(prevMat)) {
 			cutSkinLine(topStartV, topUvStart, topEndV, toUV, topTe, topParams, topUVs, Tin, false, scl);
 			if (mat2BorderVertex > -1) {
 				auto vit = scl.deepVertsTris.begin();
@@ -2562,7 +2562,7 @@ void deepCut::mat2BorderSplit(int borderV, int borderTx, int incisionTopV) {  //
 		int i;
 		for (i = 0; i < 3; ++i) {
 			if (tr[i] == incisionTopV) {
-				if (_mt->triangleMaterial(nit->triangle) == 2) {
+				if (isSkinSurface(_mt->triangleMaterial(nit->triangle))) {
 					topTx = triTx[i];
 					Vec2f tx;
 					auto fp = _mt->getTexture(topTx);
@@ -2580,12 +2580,12 @@ void deepCut::mat2BorderSplit(int borderV, int borderTx, int incisionTopV) {  //
 	// COURT - could make graphics better.
 	int bottomTx = 0;  // stub
 	int v3[3] = { borderV, incisionTopV, bottomVertex }, tex[3] = { borderTx, topTx, bottomTx };
-	int firstTri = _mt->addTriangle(v3, 6, tex);  // splitMat
+	int firstTri = _mt->addTriangle(v3, _matLayers.muscle, tex);  // splitMat
 	v3[1] = v3[2];
 	v3[2] = oppVert;
 	tex[1] = tex[2];
 	tex[2] = oppTex;
-	int oppTri = _mt->addTriangle(v3, 6, tex);
+	int oppTri = _mt->addTriangle(v3, _matLayers.muscle, tex);
 	_mt->findAdjacentTriangles(true);
 	unsigned int te = _mt->triAdjs(firstTri)[1];
 	int firstTex = _mt->triangleTextures(te >> 2)[te & 3];

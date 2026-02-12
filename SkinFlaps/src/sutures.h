@@ -12,6 +12,7 @@
 #include <memory>
 #include "Vec3f.h"
 #include "pdTetPhysics.h"
+#include "materialLayerConfig.h"
 #include "shapes.h"
 
 // forward declarations
@@ -84,6 +85,7 @@ public:
 	inline void setGLmatrices(GLmatrices *GLm) {_glm=GLm;}
 	inline void setPhysicsLattice(pdTetPhysics *ptp) { _ptp = ptp; }
 	inline void setVnBccTetrahedra(vnBccTetrahedra *vbt) { _vbt = vbt; }
+	inline void setMaterialLayers(const materialLayerConfig& ml) { _matLayers = ml; }
 	inline void setSurgicalActions(surgicalActions* sa) { _surgAct = sa; }
 	inline static void setAutoSutureSpacing(float spacing) { _sutureSpanGap = spacing; }
 	inline bool empty() { return _sutures.empty(); }
@@ -119,6 +121,7 @@ public:
 private:
 	pdTetPhysics *_ptp;
 	vnBccTetrahedra *_vbt;
+	materialLayerConfig _matLayers;
 	surgicalActions* _surgAct;
 	GLmatrices *_glm;
 	shapes *_shapes;

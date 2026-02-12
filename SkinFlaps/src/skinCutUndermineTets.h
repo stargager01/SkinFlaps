@@ -23,6 +23,7 @@
 #include "Vec2d.h"
 #include "Vec2f.h"
 #include "Mat3x3d.h"
+#include "materialLayerConfig.h"
 
 #pragma warning (disable : 4267)
 
@@ -45,14 +46,30 @@ public:
 	inline void setVnBccTetrahedra(vnBccTetrahedra *activeVnt) { _vbt = activeVnt;  }
 	inline void setMaterialTriangles(materialTriangles *mt) { _mt = mt; }
 	inline materialTriangles* getMaterialTriangles(){ return _mt; }
+	inline void setMaterialLayers(const materialLayerConfig& ml) { _matLayers = ml; }
+	inline const materialLayerConfig& getMaterialLayers() const { return _matLayers; }
 	skinCutUndermineTets();
 	skinCutUndermineTets(const skinCutUndermineTets&) = delete;
 	skinCutUndermineTets& operator=(const skinCutUndermineTets&) = delete;
 	~skinCutUndermineTets();
 
 protected:
+	materialLayerConfig _matLayers;  // configurable material layer IDs (defaults = facial)
 	materialTriangles *_mt = nullptr;  // embedded surface
 	vnBccTetrahedra *_vbt = nullptr;  // above surface embedded in these current cut tets.
+
+	// Material classification predicates — use these instead of hardcoded integer comparisons
+	bool isSkinSurface(int mat) const { return mat == _matLayers.skinSurface; }
+	bool isIncisionEdge(int mat) const { return mat == _matLayers.incisionEdge; }
+	bool isSubcutaneous(int mat) const { return mat == _matLayers.subcutaneous; }
+	bool isDeepBed(int mat) const { return mat == _matLayers.deepBed; }
+	bool isMuscle(int mat) const { return mat == _matLayers.muscle; }
+	bool isBoundary(int mat) const { return mat == _matLayers.boundary; }
+	bool isUndermineMarker(int mat) const { return mat == _matLayers.undermineMarker; }
+	bool isPeriosteum(int mat) const { return mat == _matLayers.periosteum; }
+	bool isPeriosteumUndermined(int mat) const { return mat == _matLayers.periosteumUndermined; }
+	bool isPeriosteal(int mat) const { return isPeriosteum(mat) || isPeriosteumUndermined(mat); }
+	bool isDeepTissue(int mat) const { return isDeepBed(mat) || isMuscle(mat) || isPeriosteal(mat); }
 	struct deepPoint{
 		Vec3f gridLocus;
 		int deepMtVertex;  // get tet & barycentrics from here when > -1

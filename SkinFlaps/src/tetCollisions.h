@@ -9,6 +9,7 @@
 #include "Vec2f.h"
 #include "Vec3f.h"
 #include "Mat3x3f.h"
+#include "materialLayerConfig.h"
 
 // forward declarations
 class materialTriangles;
@@ -36,6 +37,7 @@ public:
 	bool empty() { return _fixedCollisionSets.empty() && _bedRays.empty(); }
 	/// @brief Assign the physics solver used to apply collision constraint forces.
 	inline void setPdTetPhysics(pdTetPhysics *ptp) { _ptp = ptp; }
+	inline void setMaterialLayers(const materialLayerConfig& ml) { _matLayers = ml; }
 	/** @brief Set the collision sampling density multiplier.
 	 *  @param multiplier  1.0 = vertex-only rays (default). Values > 1.0 add edge midpoint
 	 *                     rays for denser sampling on convex surfaces.
@@ -54,6 +56,7 @@ private:
 	static vnBccTetrahedra *_vnt;
 	static pdTetPhysics *_ptp;
 	bool _initialized;
+	materialLayerConfig _matLayers;
 	Mat3x3f _rest[6];  // material inverses used to compute deformation gradients
 	struct vertexRay {
 		int vertex;

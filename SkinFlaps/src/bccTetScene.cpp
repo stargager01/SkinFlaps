@@ -468,6 +468,9 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 	try {
 		dbgLog << "Post-lattice: setMaterialTriangles" << std::endl;
 		_surgAct->getDeepCutPtr()->setMaterialTriangles(_mt);
+		_surgAct->getDeepCutPtr()->setMaterialLayers(_materialLayers);
+		_tetCol.setMaterialLayers(_materialLayers);
+		_surgAct->getSutures()->setMaterialLayers(_materialLayers);
 		dbgLog << "Post-lattice: setDeepBed " << deepBedFilepath << std::endl;
 		if (!_surgAct->getDeepCutPtr()->setDeepBed(_mt, deepBedFilepath.c_str(), &_vnTets)){
 			_surgAct->sendUserMessage("Undermine layer .bed file could not be found-", "Error Message");
