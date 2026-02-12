@@ -20,6 +20,7 @@ for adding new anatomical models.
    - [Phase 1: materialLayerConfig Introduction](#phase-1-materiallayerconfig-introduction)
    - [Phase 2: Configurable .smd Structure](#phase-2-configurable-smd-structure)
    - [Phase 3: Multi-Layer OBJ Merge](#phase-3-multi-layer-obj-merge)
+   - [Phase 3a: Disconnected Shells Fix](#phase-3a-disconnected-shells-fix)
 4. [Multi-Layer OBJ Structure](#4-multi-layer-obj-structure)
 5. [Step-by-Step: Adding a New Anatomy Model](#5-step-by-step-adding-a-new-anatomy-model)
 6. [Lattice Configuration](#6-lattice-configuration)
@@ -210,6 +211,93 @@ to provide sub-megatet tetrahedra needed for topology operations.
 
 ---
 
+### Phase 3a: Disconnected Shells Fix
+
+**Problem:** The Phase 3 merge created a valid multi-material OBJ, but the BCC
+lattice builder crashed during `getConnectedComponents()` with a
+`Solid ordering error`.
+
+**Root cause:** The merged OBJ contained **two disconnected closed shells**
+nested inside each other — the skin dome and the deep bed dome had no shared
+vertices or edges. Each was a topologically independent closed sphere
+(Euler characteristic V-E+F = 2, zero boundary edges).
+
+```
+Phase 3 merge (BROKEN):
+
+  ╭─── skin shell (mat 1+2) ────╮     Shell 1: 768 faces, 386 verts
+  │  closed sphere, Euler=2     │     ← no connection
+  │                              │
+  │  ╭── deep bed shell ──╮     │     Shell 2: 480 faces, 242 verts
+  │  │  (mat 5+7)         │     │     ← no connection
+  │  │  closed sphere     │     │
+  │  ╰────────────────────╯     │     Shared vertices: 0
+  ╰──────────────────────────────╯     Shared edges: 0
+```
+
+**Why the BCC tet cutter fails:** The `getConnectedComponents()` function
+(vnBccTetCutter_tbb.cpp:1608) processes triangles within each BCC tetrahedron.
+When a tet edge passes through both shells, the algorithm finds 4 intersection
+points and attempts to determine solid/outside alternation. Two independent
+nested shells create ambiguous solid-ordering — especially where both bottom
+caps overlap at the y=0 plane and the two pole vertices coincide at the
+origin (0,0,0).
+
+```
+Tet edge crossing two shells:
+  outside → skin_enter → solid → skin_exit → gap → deepbed_enter → solid → deepbed_exit
+
+The algorithm expects a SINGLE connected solid, not nested independent shells.
+The coincident bottom-cap geometry at y=0 makes intersection ordering ambiguous.
+```
+
+**Diagnosis log** (scene loading stops here):
+```
+makeFirstVnTets: getConnectedComponents (tetTriVec.size=969)
+<-- crash: Solid ordering error in getConnectedComponents()
+```
+
+**Solution:** Convert the two shells into a **single closed manifold** by:
+
+1. **Remove bottom caps** — delete the 24 skin fan faces (mat 1) and 20 deep bed
+   fan faces (mat 7), plus the two pole vertices (v386 at origin, v628 at origin).
+   This opens both domes at the bottom rim.
+
+2. **Reverse deep bed face winding** — the deep bed is the inner surface of the
+   tissue volume. For a consistent closed manifold, its normals must point inward
+   (toward the body center), which is the opposite of the original outward winding.
+   Reverse each face's vertex order: `f a/a b/b c/c` → `f a/a c/c b/b`.
+
+3. **Add connecting boundary strip** — stitch the skin rim (24 vertices, radius
+   ~10/6) to the deep bed rim (20 vertices, radius ~8.5/4.5) with triangulated
+   faces using angle-based vertex matching. Label these as material 1 (boundary).
+
+4. **Reassign periosteum** — with the bottom fan removed, designate some deep bed
+   faces near the apex (top 1-2 rings) as material 7 (periosteum) for fixed
+   physics anchoring.
+
+```
+Phase 3a fix (CORRECT):
+
+  ╭──── skin (mat 2) ──────────╮     Open dome (no bottom cap)
+  │                              │
+  ├── boundary strip (mat 1) ──┤     Connecting strip rim-to-rim
+  │  (skin rim ↔ deep bed rim) │     ~44 triangles stitching 24↔20 verts
+  │                              │
+  │  periosteum (mat 7) apex    │     Top ring(s) of deep bed
+  ├── deep bed (mat 5) ────────┤     Reversed winding (inward normals)
+  ╰──────────────────────────────╯
+  Single closed manifold, Euler=2, 1 connected component
+```
+
+**Validation requirements after fix:**
+- Connected components = 1 (single manifold)
+- Euler characteristic V-E+F = 2 (closed surface, genus 0)
+- Boundary edges = 0 (every edge shared by exactly 2 faces)
+- Consistent winding verified by `validate_obj.py`
+
+---
+
 ## 4. Multi-Layer OBJ Structure
 
 ### Material ID Assignment
@@ -251,6 +339,31 @@ f ...
 | 10 | undermineMarker | No | Marks undermined boundaries |
 
 **Minimum viable model:** Materials 1, 2, 5, 7 must be present in the OBJ.
+
+### Critical: Single Manifold Requirement
+
+All faces in the dynamic OBJ **must form one connected component**. The BCC
+tet cutter's `getConnectedComponents()` assumes a single connected surface
+when determining solid/outside regions. Two or more disconnected shells —
+even if they contain all required materials — will cause a `Solid ordering
+error` crash.
+
+```
+WRONG: Two disconnected shells          CORRECT: Single connected manifold
+(each shell closed independently)       (all faces edge-connected)
+
+  ╭── skin ──╮                            ╭── skin ──╮
+  │          │   ← no shared edges        │          │
+  │ ╭─bed─╮ │                             ├─boundary─┤   ← shared edges
+  │ ╰─────╯ │                             │          │
+  ╰──────────╯                            ╰── bed ───╯
+  2 components → CRASH                    1 component → OK
+```
+
+**How to verify:** Run a connected-component analysis on the face adjacency
+graph. Every face must be reachable from any other face by traversing shared
+edges. The Euler characteristic should be V-E+F = 2 for a closed genus-0
+surface.
 
 ### How Layers Connect to Physics
 
@@ -311,7 +424,7 @@ Model/
 - Consistent outward winding (validate with `tests/validate_obj.py`)
 - Vertex/texcoord format: `f vi/ti vi/ti vi/ti`
 
-#### Step 2: Merge into Multi-Layer OBJ
+#### Step 2: Merge into Single-Manifold Multi-Layer OBJ
 
 Use the merge tool or create a custom script:
 
@@ -319,16 +432,24 @@ Use the merge tool or create a custom script:
 python3 tools/merge_shoulder_layers.py
 ```
 
-The merge tool:
+The merge produces a **single closed manifold** (not two separate shells):
 1. Reads skin OBJ (material 2) and deep bed OBJ (material 5)
-2. Identifies bottom fan faces in each mesh (connected to pole vertex)
-3. Relabels skin bottom fan → material 1 (boundary)
-4. Relabels deep bed bottom fan → material 7 (periosteum)
-5. Merges all vertices and faces into a single OBJ
+2. Removes bottom caps (fan faces around pole vertices) from both
+3. Reverses deep bed face winding (inner surface normals must point inward)
+4. Creates boundary strip (material 1) connecting skin rim to deep bed rim
+5. Relabels deep bed apex faces as periosteum (material 7)
+6. Outputs a single connected OBJ with all layers edge-connected
+
+**Validation after merge:**
+```bash
+# Must report: 1 connected component, Euler=2, 0 boundary edges
+python3 -c "... connected-component analysis ..."
+```
 
 **For non-dome geometries**, identify boundary and periosteum faces manually:
-- **Boundary (mat 1):** Edge/rim triangles of the surgical field
-- **Periosteum (mat 7):** Triangles adjacent to bone or other immovable structures
+- **Boundary (mat 1):** Faces that bridge the skin and deep bed layers at the rim
+- **Periosteum (mat 7):** Deep bed faces adjacent to bone or immovable structures
+- **Critical:** All layers must be edge-connected into one manifold
 
 #### Step 3: Create the .bed File
 
@@ -400,6 +521,10 @@ python3 -m pytest tests/ -v
 
 **Validation checklist:**
 - [ ] OBJ has materials 1, 2, 5, 7 (minimum)
+- [ ] **Single connected component** (all faces reachable via shared edges)
+- [ ] **Euler characteristic V-E+F = 2** (closed manifold, genus 0)
+- [ ] **Zero boundary edges** (every edge shared by exactly 2 faces)
+- [ ] Consistent face winding (outward on skin, inward on deep bed)
 - [ ] All face vertex indices are in range
 - [ ] No degenerate faces (duplicate vertex indices)
 - [ ] `.bed` entry count matches skin vertex count
@@ -483,6 +608,10 @@ nTetSizeLevels = 4 (production):
 | **Projective Dynamics** | The physics solver algorithm used by the simulator. Requires fixed/constrained vertices to produce a well-posed system. |
 | **`topDeepSplit()`** | Core function that splits mesh topology to create a flap with separate top (skin) and bottom (deep bed) surfaces during incision. |
 | **`fixPeriostealPeriferalVertices()`** | Initialization function that scans all triangles for boundary (mat 1) and periosteum (mat 7) to establish physics anchor points. |
+| **Closed manifold** | A surface mesh with no boundary edges where every edge is shared by exactly 2 faces. Required by the BCC tet cutter for solid-region determination. Euler characteristic V-E+F = 2 for genus 0. |
+| **Connected component** | A maximal set of faces where any face can be reached from any other by traversing shared edges. The dynamic OBJ must have exactly 1 connected component. |
+| **`getConnectedComponents()`** | BCC tet cutter function that splits triangles within each tetrahedron into solid-connected patches. Fails with "Solid ordering error" if the mesh has multiple disconnected shells. |
+| **Face winding** | The vertex ordering of a triangle face, which determines the surface normal direction (right-hand rule). In a closed manifold, outward-facing normals point away from the enclosed solid volume. |
 
 ---
 
@@ -537,8 +666,47 @@ this at scene load via `validateScene()`.
   These are rigidly fixed — they do not move at all during simulation. Typically
   the central/deepest region of the mesh.
 
-For dome-shaped meshes, a simple heuristic: bottom fan faces (around the pole
-vertex) serve as boundary (skin side) or periosteum (deep bed side).
+For dome-shaped meshes:
+- **Boundary (mat 1):** The strip of faces connecting the skin rim to the
+  deep bed rim (bridges the two layers at the surgical field edge).
+- **Periosteum (mat 7):** The top ring(s) of the deep bed dome near the apex
+  (closest to bone, serves as fixed reference).
+
+**Warning:** Do NOT use bottom fan caps as boundary/periosteum — this creates
+disconnected shells. Instead, boundary faces must physically connect the two
+layers via shared edges.
+
+### Q: Why did the multi-layer merge still crash with "Solid ordering error"?
+
+The initial merge approach (Phase 3) simply stacked two OBJ files together —
+skin dome + deep bed dome — without connecting them. This created two
+independent closed shells (each with Euler characteristic 2). The BCC tet
+cutter's `getConnectedComponents()` assumes a single connected surface and
+cannot handle nested independent shells.
+
+**Diagnostic clue:** The debug log stops at:
+```
+makeFirstVnTets: getConnectedComponents (tetTriVec.size=969)
+```
+
+**Fix:** The two shells must be joined into a single manifold by:
+1. Removing bottom caps (opening both domes)
+2. Reversing deep bed face winding (inner surface normals inward)
+3. Adding a boundary strip connecting the two rims
+4. Relocating periosteum faces to the deep bed apex
+
+See [Phase 3a: Disconnected Shells Fix](#phase-3a-disconnected-shells-fix)
+for the full solution.
+
+### Q: How do I verify my OBJ is a single manifold?
+
+Run connected-component analysis on the face adjacency graph. Check:
+- **Components = 1** (single connected mesh)
+- **Euler V-E+F = 2** (closed surface, no holes)
+- **Boundary edges = 0** (every edge shared by exactly 2 faces)
+
+If components > 1, the two layers are disconnected and need a boundary
+strip to connect them.
 
 ### Q: Can I extend this to other body parts (arm, leg, knee)?
 
@@ -549,5 +717,6 @@ anatomy-specific material types beyond the core facial set.
 
 ---
 
-*Document version: 2026-02-12. Covers materialLayerConfig refactoring (Phase 1),
-configurable .smd loading (Phase 2), and multi-layer OBJ merge (Phase 3).*
+*Document version: 2026-02-12 v2. Covers materialLayerConfig refactoring (Phase 1),
+configurable .smd loading (Phase 2), multi-layer OBJ merge (Phase 3), and
+disconnected shells fix (Phase 3a).*
