@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.1.1] - 2026-02-12
+
+Deployment readiness: GUI tool visibility filtering, CI pytest job, cleanup.
+
+### Changed
+
+- **GUI**: Shoulder tools (Anchor, Scope, Grasp) now only visible when a shoulder
+  model is loaded (`AnatomyType::SHOULDER`); previously shown for all anatomies
+- **CI**: Added `python-tests` job to GitHub Actions — runs all 172 pytest tests
+  on every push/PR (no C++ build or Intel/CUDA dependencies needed)
+- **`.plan`**: Updated obsolete `ShoulderPrototype.smd` reference to `ShoulderMinimal.smd`
+
+---
+
 ## [3.1.0] - 2026-02-12
 
 Major release: multi-anatomy generalization, shoulder surgery extension,
@@ -137,5 +151,6 @@ Baseline version before this development branch.
 
 ---
 
-[3.1.0]: https://github.com/stargager01/SkinFlaps/compare/main...claude/setup-skinflaps-project-yg4Ne
+[3.1.1]: https://github.com/stargager01/SkinFlaps/compare/v3.1.0...claude/setup-skinflaps-project-yg4Ne
+[3.1.0]: https://github.com/stargager01/SkinFlaps/compare/main...v3.1.0
 [1.2.1]: https://github.com/stargager01/SkinFlaps/releases/tag/v1.2.1

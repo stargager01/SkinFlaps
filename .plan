@@ -114,7 +114,7 @@ Risk: MEDIUM-HIGH — some complex conditional logic interleaved with material c
 3. Add new tests:
    - test materialLayerConfig plumbing (config reaches deepCut)
    - test predicate helpers with both facial and shoulder configs
-   - test that shoulder materialLayers values match ShoulderPrototype.smd
+   - test that shoulder materialLayers values match ShoulderMinimal.smd
 4. Load FacialFlaps.smd → verify incision workflow (visual)
 5. Load ShoulderMinimal.smd → verify incision gives error message, not crash
 

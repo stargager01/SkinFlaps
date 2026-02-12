@@ -26,7 +26,29 @@ jobs:
         run: python3 tests/validate_history.py
 
   # ---------------------------------------------------------------
-  # Job 2: Linux build with GCC + CMake
+  # Job 2: Run Python test suite (model validation, integration tests)
+  # ---------------------------------------------------------------
+  # Validates OBJ models, .smd scenes, material layers, path
+  # compatibility, shoulder integration, and loading pipeline.
+  # No C++ build or Intel/CUDA dependencies needed.
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run test suite
+        run: python3 -m pytest tests/ -v --tb=short
+
+  # ---------------------------------------------------------------
+  # Job 3: Linux build with GCC + CMake
   # ---------------------------------------------------------------
   # NOTE: A full build requires Intel oneAPI (MKL + TBB), CUDA
   # Toolkit, GLFW, and Eigen3. The Intel and CUDA dependencies are
@@ -108,7 +130,7 @@ jobs:
       #     ctest --output-on-failure
 
   # ---------------------------------------------------------------
-  # Job 3: Windows build with MSVC (on PRs to main only)
+  # Job 4: Windows build with MSVC (on PRs to main only)
   # ---------------------------------------------------------------
   # The primary development platform is Windows with Visual Studio
   # 2022. This job runs only on pull requests to main to conserve
