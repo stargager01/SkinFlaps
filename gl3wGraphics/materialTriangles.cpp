@@ -726,6 +726,25 @@ void materialTriangles::closestPoint(const float(&xyz)[3], int& triangle, float(
 			R[1] = 1.0f;
 		else
 			;
+		if (R[0] + R[1] > 1.0f) {
+			// Project onto hypotenuse edge V1-V2 (where u+v=1).
+			// Parametrize as V0 + (1-t)*e1 + t*e2, t in [0,1].
+			// T[0]=V0-P, T[1]=e1, T[2]=e2 at this point.
+			Vec3f A = T[0] + T[1];
+			Vec3f B = T[2] - T[1];
+			float denom = B * B;
+			if (denom > 0.0f) {
+				float t = -(A * B) / denom;
+				if (t < 0.0f) t = 0.0f;
+				else if (t > 1.0f) t = 1.0f;
+				R[0] = 1.0f - t;
+				R[1] = t;
+			}
+			else {
+				R[0] = 0.5f;
+				R[1] = 0.5f;
+			}
+		}
 		T[0] += T[1] * R[0] + T[2] * R[1];
 		dsq = T[0].length2();
 		if (dsq < minDsq) {

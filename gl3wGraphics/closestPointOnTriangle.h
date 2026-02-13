@@ -18,8 +18,8 @@ public:
 
 	void getClosePoint(const Vec3f &point, const Vec3f triangle[3])
 	{
-		_U -= triangle[1] - triangle[0];
-		_V -= triangle[2] - triangle[0];
+		_U = triangle[1] - triangle[0];
+		_V = triangle[2] - triangle[0];
 		_vert0 = triangle[0];
 		_t0minusp = triangle[0] - point;
 		float a = _U*_U, b = _U*_V, c = _V*_V, d = _U*_t0minusp, e = _V*_t0minusp;
