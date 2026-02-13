@@ -105,7 +105,7 @@ void tetCollisions::initSoftCollisions(materialTriangles* mt, vnBccTetrahedra* v
 	// Generate edge midpoint rays for increased collision density on convex surfaces (README Issue #2).
 	// Only active when _collisionDensityMultiplier > 1.0.
 	_midpointRays.clear();
-	if (_collisionDensityMultiplier > 1.0f)
+	if (_collisionDensityMultiplier.load(std::memory_order_acquire) > 1.0f)
 		initMidpointRays(bedVerts, tets);
 	tets.erase(-1);
  	if (!tets.empty()) {
@@ -118,7 +118,7 @@ void tetCollisions::initSoftCollisions(materialTriangles* mt, vnBccTetrahedra* v
 void tetCollisions::setCollisionDensity(float multiplier) {
 	if (multiplier < 1.0f)
 		multiplier = 1.0f;
-	_collisionDensityMultiplier = multiplier;
+	_collisionDensityMultiplier.store(multiplier, std::memory_order_release);
 }
 
 void tetCollisions::initMidpointRays(std::unordered_map<int, int>& bedVerts, std::unordered_set<int>& tets) {
@@ -245,7 +245,7 @@ void tetCollisions::findSoftCollisionPairs() {
 	topBarys.assign(_bedRays.size(), std::array<float, 3>());
 	bottomBarys.assign(_bedRays.size(), std::array<float, 3>());
 	collisionNormals.assign(_bedRays.size(), std::array<float, 3>());
-	std::atomic<bool> collisionsFound = false;
+	std::atomic<bool> collisionsFound{false};
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, _bedRays.size()),
 		[&](const tbb::blocked_range<size_t>& r) {
 			for (size_t j = r.begin(); j != r.end(); ++j) {
@@ -275,7 +275,7 @@ void tetCollisions::findSoftCollisionPairs() {
 								nearV = tr[1];
 							else
 								nearV = tr[2];
-							collisionsFound = true;
+							collisionsFound.store(true, std::memory_order_relaxed);
 						}
 					}
 				}
@@ -337,7 +337,7 @@ void tetCollisions::findSoftCollisionPairs() {
 									nearV = tr[1];
 								else
 									nearV = tr[2];
-								collisionsFound = true;
+								collisionsFound.store(true, std::memory_order_relaxed);
 							}
 						}
 					}
@@ -360,7 +360,7 @@ void tetCollisions::findSoftCollisionPairs() {
 		);
 	}
 
-	if (!collisionsFound) {
+	if (!collisionsFound.load(std::memory_order_acquire)) {
 		_ptp->clearSoftCollisions();
 		return;
 	}

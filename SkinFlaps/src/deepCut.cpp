@@ -1,4 +1,5 @@
 ﻿#include <assert.h>
+#include <atomic>
 #include <stdexcept>
 #include <iostream>
 #include "Vec2d.h"
@@ -449,7 +450,7 @@ bool deepCut::uniqueSpatialTet(const Vec3f pos, int& tet, Vec3f& baryWeight) {
 //	std::chrono::time_point<std::chrono::system_clock> start, end;
 //	start = std::chrono::system_clock::now();
 
-	tet = -1;  // only found once so no write contention.
+	tet = -1;
 	auto tetInside = [&](int tetid, Vec3f& bw) ->bool {
 		boundingBox<float> bb;
 		bb.Empty_Box();
@@ -475,19 +476,26 @@ bool deepCut::uniqueSpatialTet(const Vec3f pos, int& tet, Vec3f& baryWeight) {
 			return true;
 		}
 	}
-//	for (int i = _vbt->firstInteriorTet(); i < _vbt->tetNumber(); ++i) {  // Now check the unique interior tets 
+	// Thread-safe parallel search: atomic CAS ensures only one thread writes the result.
+	std::atomic<int> foundTet{-1};
+	Vec3f foundBary;
 	tbb::parallel_for(tbb::blocked_range<std::size_t>(_vbt->firstInteriorTet(), _vbt->tetNumber()), [&](tbb::blocked_range<size_t> r) {
-		for (int i = r.begin(); i != r.end(); ++i) {
+		for (size_t i = r.begin(); i != r.end(); ++i) {
+			if (foundTet.load(std::memory_order_relaxed) > -1)
+				return;  // another thread already found a result
 			Vec3f bw;
-			if (tetInside(i, bw)) {
-				tet = i;
-				baryWeight = bw;
-				break;
+			if (tetInside(static_cast<int>(i), bw)) {
+				int expected = -1;
+				if (foundTet.compare_exchange_strong(expected, static_cast<int>(i))) {
+					foundBary = bw;  // only the winning thread writes
+				}
+				return;
 			}
 		}
-		if (tet > -1)
-			oneapi::tbb::task_group_context().cancel_group_execution();
 	});
+	tet = foundTet.load();
+	if (tet > -1)
+		baryWeight = foundBary;
 
 //	end = std::chrono::system_clock::now();
 //	std::chrono::duration<double> elapsed_seconds = end - start;

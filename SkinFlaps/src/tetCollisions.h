@@ -4,6 +4,7 @@
 #include <vector>
 #include <array>
 #include <set>
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 #include "Vec2f.h"
@@ -44,7 +45,7 @@ public:
 	 */
 	void setCollisionDensity(float multiplier);
 	/// @brief Return the current collision density multiplier.
-	inline float getCollisionDensity() const { return _collisionDensityMultiplier; }
+	inline float getCollisionDensity() const { return _collisionDensityMultiplier.load(std::memory_order_acquire); }
 	tetCollisions() : _itCount(0), _initialized(false), _collisionDensityMultiplier(1.0f), _minTime((double)FLT_MAX), _maxTime(0.0){
 		_fixedCollisionSets.clear(); _flapBotTris.clear();
 	}
@@ -83,7 +84,7 @@ private:
 		int restIdx;        // deformation gradient index (from containing tet)
 	};
 	std::vector<midpointRay> _midpointRays;
-	float _collisionDensityMultiplier;
+	std::atomic<float> _collisionDensityMultiplier;
 	void initMidpointRays(std::unordered_map<int, int>& bedVerts, std::unordered_set<int>& tets);
 
 	struct fixedCollisionSet {

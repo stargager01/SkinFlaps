@@ -1707,8 +1707,10 @@ bool surgicalActions::setHistoryAttachPoint(const int triangle, const float(&uv)
 				vI -= historyVec;
 				if (vI*edgeN < 0.0) {
 					lastEdge = (i + 2) % 3;
-					// COURT - what size to use? Could be a physics/model specific value based on variability in number of iterations to stability.
-					// creator of a history file will usually have lots of physics iterations before applying a suture, but someone playing back history quickly may have very few.
+					// Threshold for suture-placement jitter during history playback.
+					// Normalized by tetSizeSq (tet-unit-size squared) so it adapts to model scale.
+					// A creator of a history file will usually have many physics iterations
+					// before applying a suture, but playback may have very few.
 					if (vI.length2()*tetSizeSq > 0.0001f && !isBorderTriangle(nextTri)) {
 						// pull inside this triangle to ensure an insideTest() texture find on retrieval
 						float edgeParam = -dNext / (dNow - dNext);

@@ -8,6 +8,7 @@
 //    away from the deep bed.  Updates both the virtual noded cubes and the surface model.
 ////////////////////////////////////////////////////////////////////////////
 
+#include <cmath>
 #include <tuple>
 #include <assert.h>
 #include <stdexcept>
@@ -532,10 +533,14 @@ bool skinCutUndermineTets::topDeepSplit_Sub(std::list<int> &topVerts, std::list<
 	float tx[2] = { 0.0f, pathLen };
 	Vec3f lV, V;
 	_mt->getVertexCoordinate(oppVerts[0], lV.xyz);
+	// Texture path-length scale: normalize by tet unit size so incision edge texture
+	// density is consistent across models of different spatial scale (facial vs shoulder).
+	float tetUnit = (float)_vbt->getTetUnitSize();
+	float texLenScale = (tetUnit > 1e-8f) ? 0.5f / tetUnit : 0.5f;
 	for (int n = oppVerts.size(), i = 0; i < n; ++i) {
 		if (i > 0) {
 			_mt->getVertexCoordinate(oppVerts[i], V.xyz);
-			pathLen += (V - lV).length() * 0.5f;  // COURT note model specific fudge factor
+			pathLen += (V - lV).length() * texLenScale;
 			lV = V;
 		}
 		tx[1] = pathLen;
@@ -1030,12 +1035,27 @@ bool skinCutUndermineTets::setDeepBed(materialTriangles *mt, const std::string &
 	_deepBed.max_load_factor(1.2f);
 	deepPoint dp;
 	dp.deepMtVertex = -1;
+	int maxVert = activeVnt->vertexNumber();
 	char s[400];
-	while (!istr.eof())
+	while (istr.getline(s, 399))
 	{
-		int topVert;
-		istr.getline(s, 399);
-		sscanf(s, "%d %f %f %f", &topVert, &dp.gridLocus.X, &dp.gridLocus.Y, &dp.gridLocus.Z);
+		if (s[0] == '\0' || s[0] == '#')
+			continue;  // skip blank lines and comments
+		int topVert = -1;
+		float gx = 0.0f, gy = 0.0f, gz = 0.0f;
+		int nParsed = sscanf(s, "%d %f %f %f", &topVert, &gx, &gy, &gz);
+		if (nParsed != 4) {
+			continue;  // malformed line, skip
+		}
+		if (topVert < 0 || topVert >= maxVert) {
+			continue;  // vertex index out of range
+		}
+		if (!std::isfinite(gx) || !std::isfinite(gy) || !std::isfinite(gz)) {
+			continue;  // NaN or Inf coordinate
+		}
+		dp.gridLocus.X = gx;
+		dp.gridLocus.Y = gy;
+		dp.gridLocus.Z = gz;
 		// deep point guaranteed to be inside tet grid
 		dp.gridLocus -= activeVnt->getMinimumCorner();
 		dp.gridLocus *= (float)activeVnt->_unitSpacingInv;
