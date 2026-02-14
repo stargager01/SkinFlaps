@@ -19,7 +19,8 @@ How to import external STL models into the SkinFlaps surgical simulator.
 6. [Material Assignment](#6-material-assignment)
 7. [Deep Bed Configuration](#7-deep-bed-configuration)
 8. [Troubleshooting](#8-troubleshooting)
-9. [Limitations](#9-limitations)
+9. [Mesh Simplification (Size Optimization)](#9-mesh-simplification-size-optimization)
+10. [Limitations](#10-limitations)
 
 ---
 
@@ -212,6 +213,7 @@ Options:
   --uv-method METHOD     UV generation: planar|spherical|cylindrical (default: planar)
   --material-mode MODE   Material assignment: manual|auto|interactive (default: manual)
   --decimate N           Reduce face count to N faces (quadric decimation)
+  --simplify-ratio R     Keep ratio R of faces (0.1~1.0, default: 1.0 = no reduction)
   --fix-normals          Attempt to unify face normals (default: enabled)
   --no-fix-normals       Skip normal unification
   --verbose              Print detailed conversion log
@@ -375,7 +377,72 @@ negative values project inward (toward the body interior).
 
 ---
 
-## 9. Limitations
+## 9. Mesh Simplification (Size Optimization)
+
+### Why Simplify?
+
+DICOM-extracted STL files often have excessive face counts (100K+), causing slow
+BCC lattice generation and large memory usage. The `--simplify-ratio` option
+reduces face count while preserving mesh topology.
+
+### Usage
+
+```bash
+# Keep 50% of faces (recommended starting point)
+python3 tools/convert_stl_to_obj.py Model/HighRes.stl --simplify-ratio 0.5
+
+# Aggressive reduction (keep 20% — check quality afterward)
+python3 tools/convert_stl_to_obj.py Model/HighRes.stl --simplify-ratio 0.2
+
+# Combine with other options
+python3 tools/convert_stl_to_obj.py Model/HighRes.stl \
+    --simplify-ratio 0.3 --material-mode auto --uv-method spherical
+```
+
+### Recommended Ranges
+
+| Face Count (original) | Recommended Ratio | Result |
+|------------------------|-------------------|--------|
+| < 5,000 | 1.0 (no reduction) | Already within simulator limits |
+| 5,000 ~ 20,000 | 0.5 ~ 0.8 | Good balance of speed and quality |
+| 20,000 ~ 100,000 | 0.2 ~ 0.5 | Significant speedup with acceptable quality |
+| > 100,000 | 0.1 ~ 0.3 | Required for simulator performance |
+
+### `--simplify-ratio` vs `--decimate`
+
+| Option | Input | Example | When to use |
+|--------|-------|---------|-------------|
+| `--simplify-ratio 0.5` | Ratio (0.1~1.0) | Halves face count | When you don't know the face count |
+| `--decimate 5000` | Absolute count | Exactly 5000 faces | When you need a specific face count |
+
+If both are specified, `--simplify-ratio` takes precedence.
+
+### Post-Simplification Validation
+
+The converter automatically validates the mesh after simplification:
+- **Watertight check**: Attempts repair if simplification creates holes
+- **Euler characteristic**: Warns if topology changes (V-E+F != 2)
+- **Degenerate faces**: Detects zero-area triangles from collapse
+- **Excessive reduction**: Warns if >80% of faces were removed
+
+Always validate the output OBJ after simplification:
+```bash
+python3 scripts/quick_test.py --validate-obj Model/HighRes.obj
+```
+
+### Troubleshooting Simplification
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| "Broke watertight property" | Decimation created holes | Use higher ratio (0.5+) or repair with `fix_stl_manifold.py` |
+| "Material boundary lost" | Too aggressive reduction collapsed boundary faces | Use `--simplify-ratio >= 0.3` and `--material-mode auto` |
+| "Euler characteristic changed" | Topology altered (handles/holes) | Use higher ratio; inspect in MeshLab |
+| "Only N faces remaining" | Ratio too low for mesh size | Use higher ratio; ensure >=18 faces |
+| Solver singular matrix | Boundary/periosteum faces lost | Re-run with higher ratio; check material distribution |
+
+---
+
+## 10. Limitations
 
 ### Current Limitations
 - **No quad/polygon support in STL:** STL only has triangles (this is fine — SkinFlaps requires triangles)

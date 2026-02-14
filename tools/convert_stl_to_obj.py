@@ -204,8 +204,16 @@ def assign_materials_manual(mesh, boundary_faces=None, periosteum_faces=None):
 # ── STL Processing ──────────────────────────────────────────────────
 
 
-def load_and_repair_stl(stl_path, fix_normals=True, decimate_target=None):
+def load_and_repair_stl(stl_path, fix_normals=True, decimate_target=None,
+                        simplify_ratio=None):
     """Load STL and perform mesh repair.
+
+    Args:
+        stl_path: Path to the STL file.
+        fix_normals: Unify face normals outward.
+        decimate_target: Absolute target face count (quadric decimation).
+        simplify_ratio: Ratio of faces to keep, 0.1~1.0 (1.0 = no reduction).
+            Takes precedence over decimate_target if both are specified.
 
     Returns:
         trimesh.Trimesh with merged vertices, removed degenerates, unified normals
@@ -241,9 +249,18 @@ def load_and_repair_stl(stl_path, fix_normals=True, decimate_target=None):
         except (ImportError, Exception) as e:
             print(f"  Warning: normal repair skipped ({e})")
 
-    # Optional decimation
-    if decimate_target and decimate_target < len(mesh.faces):
+    # Mesh simplification (ratio takes precedence over absolute target)
+    pre_simplify_faces = len(mesh.faces)
+    if simplify_ratio is not None and simplify_ratio < 1.0:
+        target = max(12, int(pre_simplify_faces * simplify_ratio))
+        print(f"  Simplify: ratio={simplify_ratio:.2f}, "
+              f"{pre_simplify_faces} -> {target} target faces")
+        mesh = mesh.simplify_quadric_decimation(target)
+        _validate_post_simplify(mesh, pre_simplify_faces)
+    elif decimate_target and decimate_target < pre_simplify_faces:
+        print(f"  Decimate: {pre_simplify_faces} -> {decimate_target} target faces")
         mesh = mesh.simplify_quadric_decimation(decimate_target)
+        _validate_post_simplify(mesh, pre_simplify_faces)
 
     print(f"  Loaded:   {original_verts} vertices, {original_faces} faces")
     print(f"  Repaired: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
@@ -251,6 +268,50 @@ def load_and_repair_stl(stl_path, fix_normals=True, decimate_target=None):
     print(f"  Euler number: {mesh.euler_number}")
 
     return mesh
+
+
+def _validate_post_simplify(mesh, pre_faces):
+    """Validate mesh integrity after simplification.
+
+    Warns about geometry loss, watertight breakage, and degenerate faces.
+    """
+    post_faces = len(mesh.faces)
+    reduction_pct = (1.0 - post_faces / pre_faces) * 100.0 if pre_faces > 0 else 0.0
+
+    # Watertight check
+    if not mesh.is_watertight:
+        print(f"  WARNING: Simplification broke watertight property. "
+              f"Attempting repair...")
+        trimesh.repair.fill_holes(mesh)
+        trimesh.repair.fix_winding(mesh)
+        if mesh.is_watertight:
+            print(f"  Repair successful: watertight restored.")
+        else:
+            print(f"  WARNING: Mesh is NOT watertight after repair. "
+                  f"Solver may produce 'Solid ordering error'.")
+
+    # Euler characteristic
+    euler = mesh.euler_number
+    if euler != 2:
+        print(f"  WARNING: Euler characteristic = {euler} (expected 2). "
+              f"Mesh topology changed during simplification.")
+
+    # Degenerate faces
+    areas = mesh.area_faces
+    n_degenerate = int((areas < 1e-12).sum())
+    if n_degenerate > 0:
+        print(f"  WARNING: {n_degenerate} degenerate faces after simplification.")
+
+    # Excessive reduction warning
+    if reduction_pct > 80.0:
+        print(f"  WARNING: {reduction_pct:.1f}% face reduction. "
+              f"Material boundary regions may be lost. "
+              f"Consider using --simplify-ratio >= 0.3 .")
+
+    # Minimum face count for material assignment
+    if post_faces < 18:
+        print(f"  WARNING: Only {post_faces} faces remaining. "
+              f"Need >=18 for boundary(6)+skin+periosteum(6) assignment.")
 
 
 # ── OBJ Writer ──────────────────────────────────────────────────────
@@ -371,8 +432,12 @@ def print_diagnostics(mesh, materials):
 def convert_stl_to_obj(stl_path, obj_path=None, uv_method="planar",
                        material_mode="manual", boundary_axis="y",
                        boundary_pct=8.0, periosteum_pct=8.0,
-                       fix_normals=True, decimate_target=None):
+                       fix_normals=True, decimate_target=None,
+                       simplify_ratio=None):
     """Main conversion pipeline.
+
+    Args:
+        simplify_ratio: Ratio of faces to keep (0.1~1.0). Overrides decimate_target.
 
     Returns:
         (obj_path, n_vertices, n_faces) on success, None on failure
@@ -385,11 +450,16 @@ def convert_stl_to_obj(stl_path, obj_path=None, uv_method="planar",
     print(f"  Output: {obj_path}")
     print(f"  UV method: {uv_method}")
     print(f"  Material mode: {material_mode}")
+    if simplify_ratio is not None and simplify_ratio < 1.0:
+        print(f"  Simplify ratio: {simplify_ratio:.2f}")
+    elif decimate_target:
+        print(f"  Decimate target: {decimate_target} faces")
 
     # Step 1: Load and repair
     print(f"\n--- Step 1: Load & Repair ---")
     mesh = load_and_repair_stl(stl_path, fix_normals=fix_normals,
-                               decimate_target=decimate_target)
+                               decimate_target=decimate_target,
+                               simplify_ratio=simplify_ratio)
 
     if len(mesh.faces) < 12:
         print(f"ERROR: Mesh has only {len(mesh.faces)} faces. "
@@ -464,6 +534,7 @@ Examples:
   python convert_stl_to_obj.py Model/MyModel.stl --uv-method spherical
   python convert_stl_to_obj.py Model/MyModel.stl --material-mode auto --boundary-axis y
   python convert_stl_to_obj.py Model/MyModel.stl --output Model/Output.obj --decimate 5000
+  python convert_stl_to_obj.py Model/MyModel.stl --simplify-ratio 0.5
 """
     )
     parser.add_argument("input", metavar="INPUT_STL",
@@ -486,7 +557,19 @@ Examples:
                         help="Skip normal repair (not recommended)")
     parser.add_argument("--decimate", type=int, metavar="TARGET_FACES",
                         help="Decimate mesh to target face count")
+    parser.add_argument("--simplify-ratio", type=float, metavar="RATIO",
+                        help="Keep this ratio of faces (0.1~1.0, default: 1.0 = no reduction). "
+                             "Overrides --decimate if both are specified.")
     args = parser.parse_args()
+
+    # Validate simplify-ratio range
+    if args.simplify_ratio is not None:
+        if args.simplify_ratio < 0.01 or args.simplify_ratio > 1.0:
+            print(f"ERROR: --simplify-ratio must be between 0.01 and 1.0, "
+                  f"got {args.simplify_ratio}", file=sys.stderr)
+            sys.exit(1)
+        if args.decimate:
+            print(f"WARNING: --simplify-ratio overrides --decimate")
 
     if not os.path.isfile(args.input):
         print(f"ERROR: Input file not found: {args.input}", file=sys.stderr)
@@ -502,6 +585,7 @@ Examples:
         periosteum_pct=args.periosteum_pct,
         fix_normals=not args.no_fix_normals,
         decimate_target=args.decimate,
+        simplify_ratio=args.simplify_ratio,
     )
 
     sys.exit(0 if result else 1)

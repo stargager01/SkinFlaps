@@ -10,12 +10,14 @@ Usage:
     python3 quick_test.py --validate-smd <smd_path>
     python3 quick_test.py --validate-hst <hst_path>
     python3 quick_test.py --validate-stl <stl_path>
+    python3 quick_test.py --validate-stl-simplified <stl_path> [--ratio <0.1~1.0>]
     python3 quick_test.py --validate-bed <bed_path> [--obj <obj_path>]
 
 Example:
     python3 quick_test.py solution.py test_solution.py
     python3 quick_test.py --validate-obj Model/ShoulderSkin.obj
     python3 quick_test.py --validate-stl Model/MyModel.stl
+    python3 quick_test.py --validate-stl-simplified Model/MyModel.stl --ratio 0.5
 """
 import sys
 import importlib.util
@@ -367,6 +369,66 @@ def validate_stl(stl_path: str) -> List[Tuple[str, bool, str]]:
     return results
 
 
+def validate_stl_simplified(stl_path: str, ratio: float = 0.5) -> List[Tuple[str, bool, str]]:
+    """Validate an STL file after simplification at the given ratio.
+
+    Runs simplification, then checks watertight, Euler, degenerates.
+    """
+    results = []
+    path = Path(stl_path)
+
+    if not path.exists():
+        return [("file_exists", False, f"File not found: {stl_path}")]
+
+    if ratio < 0.01 or ratio > 1.0:
+        return [("ratio_valid", False, f"Ratio {ratio} out of range (0.01~1.0)")]
+    results.append(("ratio_valid", True, f"ratio={ratio:.2f}"))
+
+    try:
+        import trimesh
+    except ImportError:
+        return [("trimesh_available", False, "trimesh required for simplification validation")]
+
+    try:
+        mesh = trimesh.load(stl_path, force='mesh')
+        original_faces = len(mesh.faces)
+        results.append(("loaded", True, f"{original_faces} faces loaded"))
+
+        target = max(12, int(original_faces * ratio))
+        mesh = mesh.simplify_quadric_decimation(target)
+        post_faces = len(mesh.faces)
+        results.append(("simplified", True,
+                         f"{original_faces} -> {post_faces} faces "
+                         f"({post_faces/original_faces*100:.1f}% kept)"))
+
+        # Watertight after simplify
+        results.append(("watertight_post_simplify", mesh.is_watertight,
+                         "Watertight" if mesh.is_watertight
+                         else "NOT watertight after simplification"))
+
+        # Euler
+        euler = mesh.euler_number
+        results.append(("euler_post_simplify", euler == 2,
+                         f"Euler number: {euler}" +
+                         (" (expected 2)" if euler != 2 else "")))
+
+        # Degenerate faces
+        areas = mesh.area_faces
+        n_degenerate = int((areas < 1e-12).sum())
+        results.append(("no_degenerate_post_simplify", n_degenerate == 0,
+                         f"{n_degenerate} degenerate faces"))
+
+        # Minimum face count
+        results.append(("sufficient_faces", post_faces >= 18,
+                         f"{post_faces} faces" +
+                         (" (need >=18)" if post_faces < 18 else "")))
+
+    except Exception as e:
+        results.append(("simplify_error", False, f"Simplification failed: {e}"))
+
+    return results
+
+
 def validate_bed(bed_path: str, obj_path: str = None) -> List[Tuple[str, bool, str]]:
     """Validate a .bed (deep bed) file.
 
@@ -438,6 +500,7 @@ def run_validation(mode: str, filepath: str, extra_args: dict = None):
         "--validate-smd": ("SMD Scene", validate_smd),
         "--validate-hst": ("HST History", validate_hst),
         "--validate-stl": ("STL Mesh", validate_stl),
+        "--validate-stl-simplified": ("STL Simplified", validate_stl_simplified),
         "--validate-bed": ("BED Deep Bed", validate_bed),
     }
 
@@ -448,8 +511,10 @@ def run_validation(mode: str, filepath: str, extra_args: dict = None):
     print(f"{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
     print(f"  File: {filepath}\n")
 
-    # Pass extra args for validators that accept them (e.g., validate_bed needs obj_path)
+    # Pass extra args for validators that accept them
     if extra_args and mode == "--validate-bed":
+        results = validator(filepath, **extra_args)
+    elif extra_args and mode == "--validate-stl-simplified":
         results = validator(filepath, **extra_args)
     else:
         results = validator(filepath)
@@ -481,22 +546,28 @@ def main():
         print(f"  python3 quick_test.py --validate-smd <file.smd>")
         print(f"  python3 quick_test.py --validate-hst <file.hst>")
         print(f"  python3 quick_test.py --validate-stl <file.stl>")
+        print(f"  python3 quick_test.py --validate-stl-simplified <file.stl> [--ratio <0.1~1.0>]")
         print(f"  python3 quick_test.py --validate-bed <file.bed> [--obj <file.obj>]")
         sys.exit(1)
 
     # SkinFlaps validation modes
     validation_modes = ("--validate-obj", "--validate-smd", "--validate-hst",
-                        "--validate-stl", "--validate-bed")
+                        "--validate-stl", "--validate-stl-simplified",
+                        "--validate-bed")
     if sys.argv[1] in validation_modes:
         if len(sys.argv) < 3:
             print(f"{RED}Error: filepath required{RESET}")
             sys.exit(1)
-        # Parse extra args for --validate-bed
+        # Parse extra args for validators that accept them
         extra_args = {}
         if sys.argv[1] == "--validate-bed" and "--obj" in sys.argv:
             obj_idx = sys.argv.index("--obj")
             if obj_idx + 1 < len(sys.argv):
                 extra_args["obj_path"] = sys.argv[obj_idx + 1]
+        if sys.argv[1] == "--validate-stl-simplified" and "--ratio" in sys.argv:
+            ratio_idx = sys.argv.index("--ratio")
+            if ratio_idx + 1 < len(sys.argv):
+                extra_args["ratio"] = float(sys.argv[ratio_idx + 1])
         run_validation(sys.argv[1], sys.argv[2], extra_args=extra_args)
         return
 
