@@ -454,7 +454,9 @@ bool bccTetScene::loadScene(const char *dataDirectory, const char *sceneFileName
 		if (mlObj.HasKey("arthroscopicPortal")) _materialLayers.arthroscopicPortal = mlObj["arthroscopicPortal"].ToInt();
 	}
 	dbgLog << "Step 12: createNewPhysicsLattice start (nTetSizeLevels=" << nTetSizeLevels << " maxDimMegatetSubdivs=" << maxDimMegatetSubdivs << ")" << std::endl;
+	dbgLog.close();  // close before createNewPhysicsLattice opens same file in append mode
 	createNewPhysicsLattice(maxDimMegatetSubdivs, nTetSizeLevels);  // has internal try-catch
+	dbgLog.open(logPath.c_str(), std::ios::app);  // reopen in append mode
 	dbgLog << "Step 12: createNewPhysicsLattice done, error=" << _surgAct->taskThreadError << std::endl;
 	if (_surgAct->taskThreadError) {
 		std::string errMsg = "[Step 12/12] ";
@@ -606,6 +608,9 @@ void bccTetScene::createNewPhysicsLattice(int maxDimMegatetSubdivs, int nTetSize
 			_surgAct->taskThreadErrorStr = "Couldn't create the initial physics lattice. Unknown error.";
 		}
 	}
+	// Clear debug log path so subsequent updateOldPhysicsLattice -> macrotetRecutCore
+	// calls do not keep appending to the initial load log file.
+	_tc.setDebugLogPath("");
 }
 
 void bccTetScene::initPdPhysics()
