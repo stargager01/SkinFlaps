@@ -2,25 +2,30 @@
 """
 Quick Test Runner - Framework-independent test execution.
 Runs tests by importing module and test file, executing test functions.
-Includes SkinFlaps domain validation for .obj, .smd, .hst, .bed files.
+Includes SkinFlaps domain validation for .obj, .smd, .hst, .bed, .stl files.
 
 Usage:
     python3 quick_test.py <module_path> <test_path>
     python3 quick_test.py --validate-obj <obj_path>
     python3 quick_test.py --validate-smd <smd_path>
     python3 quick_test.py --validate-hst <hst_path>
+    python3 quick_test.py --validate-stl <stl_path>
+    python3 quick_test.py --validate-bed <bed_path> [--obj <obj_path>]
 
 Example:
     python3 quick_test.py solution.py test_solution.py
     python3 quick_test.py --validate-obj Model/ShoulderSkin.obj
+    python3 quick_test.py --validate-stl Model/MyModel.stl
 """
 import sys
 import importlib.util
 import traceback
 import time
 import json
+import struct
 from pathlib import Path
 from typing import Callable, List, Tuple, Optional
+from collections import defaultdict
 
 # ANSI colors
 GREEN = "\033[92m"
@@ -253,12 +258,187 @@ def validate_hst(hst_path: str) -> List[Tuple[str, bool, str]]:
     return results
 
 
-def run_validation(mode: str, filepath: str):
+def validate_stl(stl_path: str) -> List[Tuple[str, bool, str]]:
+    """Validate an STL file for SkinFlaps import readiness.
+
+    Checks: file format, watertight, manifold, face count, component count.
+    Uses pure Python parsing (no trimesh dependency for validation).
+    """
+    results = []
+    path = Path(stl_path)
+
+    if not path.exists():
+        return [("file_exists", False, f"File not found: {stl_path}")]
+    results.append(("file_exists", True, "OK"))
+
+    # Detect ASCII vs Binary STL
+    file_size = path.stat().st_size
+    if file_size < 84:
+        results.append(("file_size", False, f"File too small ({file_size} bytes)"))
+        return results
+
+    with open(path, 'rb') as f:
+        header = f.read(80)
+        is_ascii = header[:5] == b'solid' and b'\x00' not in header
+        if not is_ascii:
+            # Binary STL: 80-byte header + 4-byte triangle count + 50 bytes per tri
+            f.seek(80)
+            n_triangles = struct.unpack('<I', f.read(4))[0]
+            expected_size = 84 + n_triangles * 50
+            if file_size != expected_size:
+                # Could still be ASCII that doesn't start with "solid"
+                is_ascii = True
+
+    results.append(("format_detected", True,
+                     f"{'ASCII' if is_ascii else 'Binary'} STL ({file_size} bytes)"))
+
+    # Parse triangles (use trimesh if available, else basic parse)
+    vertices = []
+    faces = []
+
+    try:
+        import trimesh
+        mesh = trimesh.load(stl_path, force='mesh')
+        vertices = mesh.vertices
+        faces = mesh.faces
+        n_verts = len(vertices)
+        n_faces = len(faces)
+        is_watertight = mesh.is_watertight
+        euler = mesh.euler_number
+
+        try:
+            components = mesh.split(only_watertight=False)
+            n_components = len(components)
+        except Exception:
+            n_components = -1
+
+        # Degenerate faces
+        areas = mesh.area_faces
+        n_degenerate = int((areas < 1e-12).sum())
+
+    except ImportError:
+        # Basic binary STL parse without trimesh
+        with open(path, 'rb') as f:
+            f.seek(80)
+            n_faces_raw = struct.unpack('<I', f.read(4))[0]
+            n_faces = n_faces_raw
+            n_verts = n_faces * 3  # STL has per-face vertices (pre-merge)
+            is_watertight = None
+            euler = None
+            n_components = None
+            n_degenerate = None
+
+    results.append(("has_faces", n_faces > 0, f"{n_faces} faces"))
+    if n_faces > 0:
+        results.append(("face_count_sufficient", n_faces >= 12,
+                         f"{n_faces} faces (need >=12 for boundary+skin+periosteum)"))
+
+    if is_watertight is not None:
+        results.append(("watertight", is_watertight,
+                         "Watertight" if is_watertight else
+                         "NOT watertight (holes detected)"))
+
+    if euler is not None:
+        results.append(("euler_characteristic", euler == 2,
+                         f"Euler number: {euler}" +
+                         (" (expected 2)" if euler != 2 else "")))
+
+    if n_components is not None and n_components >= 0:
+        results.append(("single_component", n_components == 1,
+                         f"{n_components} connected component(s)" +
+                         (" (need exactly 1)" if n_components != 1 else "")))
+
+    if n_degenerate is not None:
+        results.append(("no_degenerate", n_degenerate == 0,
+                         f"{n_degenerate} degenerate (zero-area) faces"))
+
+    # Non-manifold edge check (if trimesh was available)
+    if len(faces) > 0 and hasattr(faces, '__len__'):
+        edge_count = defaultdict(int)
+        for face in faces:
+            for i in range(3):
+                e = tuple(sorted([int(face[i]), int(face[(i + 1) % 3])]))
+                edge_count[e] += 1
+        non_manifold = sum(1 for c in edge_count.values() if c > 2)
+        results.append(("manifold_edges", non_manifold == 0,
+                         f"{non_manifold} non-manifold edges" if non_manifold > 0
+                         else "All edges manifold"))
+
+    return results
+
+
+def validate_bed(bed_path: str, obj_path: str = None) -> List[Tuple[str, bool, str]]:
+    """Validate a .bed (deep bed) file.
+
+    Optionally cross-checks vertex count against an OBJ file.
+    """
+    results = []
+    path = Path(bed_path)
+
+    if not path.exists():
+        return [("file_exists", False, f"File not found: {bed_path}")]
+    results.append(("file_exists", True, "OK"))
+
+    entries = []
+    parse_errors = 0
+
+    with open(path, 'r') as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) != 4:
+                parse_errors += 1
+                continue
+            try:
+                idx = int(parts[0])
+                x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
+                entries.append((idx, x, y, z))
+            except ValueError:
+                parse_errors += 1
+
+    results.append(("parse_ok", parse_errors == 0,
+                     f"{parse_errors} parse errors" if parse_errors > 0
+                     else f"{len(entries)} entries parsed"))
+
+    results.append(("has_entries", len(entries) > 0,
+                     f"{len(entries)} bed entries"))
+
+    # Check sequential indices
+    if entries:
+        indices = [e[0] for e in entries]
+        expected = list(range(len(entries)))
+        sequential = indices == expected
+        results.append(("sequential_indices", sequential,
+                         "Indices sequential (0..N-1)" if sequential
+                         else f"Non-sequential indices (first mismatch at {next((i for i,v in enumerate(indices) if v != i), '?')})"))
+
+    # Cross-check with OBJ vertex count
+    if obj_path:
+        obj_p = Path(obj_path)
+        if obj_p.exists():
+            n_obj_verts = 0
+            with open(obj_p, 'r') as f:
+                for line in f:
+                    if line.startswith('v ') and not line.startswith('vt') and not line.startswith('vn'):
+                        n_obj_verts += 1
+            matches = len(entries) == n_obj_verts
+            results.append(("matches_obj", matches,
+                             f".bed entries ({len(entries)}) vs OBJ vertices ({n_obj_verts})" +
+                             ("" if matches else " — MISMATCH will crash setDeepBed()")))
+
+    return results
+
+
+def run_validation(mode: str, filepath: str, extra_args: dict = None):
     """Run domain-specific validation and print results."""
     validators = {
         "--validate-obj": ("OBJ Mesh", validate_obj),
         "--validate-smd": ("SMD Scene", validate_smd),
         "--validate-hst": ("HST History", validate_hst),
+        "--validate-stl": ("STL Mesh", validate_stl),
+        "--validate-bed": ("BED Deep Bed", validate_bed),
     }
 
     label, validator = validators[mode]
@@ -268,7 +448,11 @@ def run_validation(mode: str, filepath: str):
     print(f"{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
     print(f"  File: {filepath}\n")
 
-    results = validator(filepath)
+    # Pass extra args for validators that accept them (e.g., validate_bed needs obj_path)
+    if extra_args and mode == "--validate-bed":
+        results = validator(filepath, **extra_args)
+    else:
+        results = validator(filepath)
 
     passed = sum(1 for _, ok, _ in results if ok)
     failed = sum(1 for _, ok, _ in results if not ok)
@@ -296,14 +480,24 @@ def main():
         print(f"  python3 quick_test.py --validate-obj <file.obj>")
         print(f"  python3 quick_test.py --validate-smd <file.smd>")
         print(f"  python3 quick_test.py --validate-hst <file.hst>")
+        print(f"  python3 quick_test.py --validate-stl <file.stl>")
+        print(f"  python3 quick_test.py --validate-bed <file.bed> [--obj <file.obj>]")
         sys.exit(1)
 
     # SkinFlaps validation modes
-    if sys.argv[1] in ("--validate-obj", "--validate-smd", "--validate-hst"):
+    validation_modes = ("--validate-obj", "--validate-smd", "--validate-hst",
+                        "--validate-stl", "--validate-bed")
+    if sys.argv[1] in validation_modes:
         if len(sys.argv) < 3:
             print(f"{RED}Error: filepath required{RESET}")
             sys.exit(1)
-        run_validation(sys.argv[1], sys.argv[2])
+        # Parse extra args for --validate-bed
+        extra_args = {}
+        if sys.argv[1] == "--validate-bed" and "--obj" in sys.argv:
+            obj_idx = sys.argv.index("--obj")
+            if obj_idx + 1 < len(sys.argv):
+                extra_args["obj_path"] = sys.argv[obj_idx + 1]
+        run_validation(sys.argv[1], sys.argv[2], extra_args=extra_args)
         return
 
     # Standard test mode
